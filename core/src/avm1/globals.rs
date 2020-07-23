@@ -41,6 +41,7 @@ pub(crate) mod system_security;
 pub(crate) mod text_field;
 mod text_format;
 mod xml;
+mod local_connection;
 
 pub fn random<'gc>(
     _activation: &mut Activation<'_, 'gc>,
@@ -267,6 +268,8 @@ pub fn create_globals<'gc>(
     let context_menu_item_proto =
         context_menu_item::create_proto(gc_context, object_proto, function_proto);
 
+    let local_connection_proto = local_connection::create_proto(gc_context, object_proto, function_proto);
+
     let button = FunctionObject::function(
         gc_context,
         Executable::Native(button::constructor),
@@ -290,6 +293,12 @@ pub fn create_globals<'gc>(
         Executable::Native(function::constructor),
         Some(function_proto),
         Some(function_proto),
+    );
+    let local_connection = FunctionObject::function(
+        gc_context,
+        Executable::Native(local_connection::constructor),
+        Some(function_proto),
+        Some(local_connection_proto),
     );
     let load_vars = FunctionObject::function(
         gc_context,
@@ -380,6 +389,7 @@ pub fn create_globals<'gc>(
     globals.define_value(gc_context, "Error", error.into(), EnumSet::empty());
     globals.define_value(gc_context, "Object", object.into(), EnumSet::empty());
     globals.define_value(gc_context, "Function", function.into(), EnumSet::empty());
+    globals.define_value(gc_context, "LocalConnection", local_connection.into(), EnumSet::empty());
     globals.define_value(gc_context, "LoadVars", load_vars.into(), EnumSet::empty());
     globals.define_value(gc_context, "MovieClip", movie_clip.into(), EnumSet::empty());
     globals.define_value(
