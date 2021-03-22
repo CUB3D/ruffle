@@ -1,0 +1,10 @@
+// MouseCursor.ARROW
+arrow
+// MouseCursor.AUTO
+auto
+// MouseCursor.BUTTON
+button
+// MouseCursor.HAND
+hand
+// MouseCursor.IBEAM
+ibeam
