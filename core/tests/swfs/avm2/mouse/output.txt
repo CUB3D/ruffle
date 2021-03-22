@@ -1,0 +1,8 @@
+// Mouse.supportsCursor
+true
+// Mouse.supportsNativeCursor
+true
+// Mouse.cursor
+auto
+// Mouse.cursor (after set to MouseCursor.IBEAM)
+ibeam

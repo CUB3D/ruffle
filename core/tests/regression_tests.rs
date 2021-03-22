@@ -541,6 +541,7 @@ swf_tests! {
     (as3_shape_drawrect, "avm2/shape_drawrect", 1),
     (as3_movieclip_drawrect, "avm2/movieclip_drawrect", 1),
     (as3_mouse_cursor, "avm2/mouse_cursor", 1),
+    (as3_mouse, "avm2/mouse", 1),
 }
 
 // TODO: These tests have some inaccuracies currently, so we use approx_eq to test that numeric values are close enough.
