@@ -582,6 +582,22 @@ pub fn load_player_globals<'gc>(
         script,
     )?;
 
+    // package `flash.ui`
+    class(
+        activation,
+        flash::ui::mouse_cursor::create_class(mc),
+        implicit_deriver,
+        domain,
+        script
+    )?;
+    class(
+        activation,
+        flash::ui::mouse::create_class(mc),
+        implicit_deriver,
+        domain,
+        script
+    )?;
+
     // package `flash.display`
     activation
         .context
