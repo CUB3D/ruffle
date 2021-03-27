@@ -1,5 +1,6 @@
 //! `flash.ui.Mouse` builtin/prototype
 
+use crate::avm1::AvmString;
 use crate::avm2::class::{Class, ClassAttributes};
 use crate::avm2::method::Method;
 use crate::avm2::traits::Trait;
@@ -70,13 +71,13 @@ pub fn unregister_cursor<'gc>(
 
 /// Implements `cursor` property getter
 pub fn cursor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+    activation: &mut Activation<'_, 'gc, '_>,
     _this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error> {
     log::warn!("flash.ui.Mouse.cursor get(), not yet implemented");
 
-    Ok(Value::Undefined)
+    Ok(AvmString::new(activation.context.gc_context, "auto").into())
 }
 
 /// Implements `cursor` property setter
@@ -123,35 +124,35 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.define_class_trait(Trait::from_getter(
         QName::new(Namespace::public(), "cursor"),
-        Method::from_builtin(cursor)
+        Method::from_builtin(cursor),
     ));
     write.define_class_trait(Trait::from_setter(
         QName::new(Namespace::public(), "cursor"),
-        Method::from_builtin(set_cursor)
+        Method::from_builtin(set_cursor),
     ));
     write.define_class_trait(Trait::from_getter(
         QName::new(Namespace::public(), "supportsCursor"),
-        Method::from_builtin(supports_cursor)
+        Method::from_builtin(supports_cursor),
     ));
     write.define_class_trait(Trait::from_getter(
         QName::new(Namespace::public(), "supportsNativeCursor"),
-        Method::from_builtin(supports_native_cursor)
+        Method::from_builtin(supports_native_cursor),
     ));
     write.define_class_trait(Trait::from_method(
         QName::new(Namespace::public(), "hide"),
-        Method::from_builtin(hide)
+        Method::from_builtin(hide),
     ));
     write.define_class_trait(Trait::from_method(
         QName::new(Namespace::public(), "show"),
-        Method::from_builtin(show)
+        Method::from_builtin(show),
     ));
     write.define_class_trait(Trait::from_method(
         QName::new(Namespace::public(), "registerCursor"),
-        Method::from_builtin(register_cursor)
+        Method::from_builtin(register_cursor),
     ));
     write.define_class_trait(Trait::from_method(
         QName::new(Namespace::public(), "unregisterCursor"),
-        Method::from_builtin(unregister_cursor)
+        Method::from_builtin(unregister_cursor),
     ));
 
     class

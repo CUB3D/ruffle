@@ -1,2 +1,2 @@
-pub mod mouse_cursor;
 pub mod mouse;
+pub mod mouse_cursor;

@@ -588,14 +588,14 @@ pub fn load_player_globals<'gc>(
         flash::ui::mouse_cursor::create_class(mc),
         implicit_deriver,
         domain,
-        script
+        script,
     )?;
     class(
         activation,
         flash::ui::mouse::create_class(mc),
         implicit_deriver,
         domain,
-        script
+        script,
     )?;
 
     // package `flash.display`
