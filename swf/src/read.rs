@@ -1968,7 +1968,8 @@ impl<'a> Reader<'a> {
             None
         };
         let is_bitmap_cached = if (flags & 0b100_00000000) != 0 {
-            Some(self.read_u8()? != 0)
+            // Sometimes this value is missing when the value is set, assume true if so
+            Some(self.read_u8().unwrap_or(1) != 0)
         } else {
             None
         };
