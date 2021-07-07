@@ -50,7 +50,7 @@ pub fn swf_char_to_lowercase(c: char) -> char {
         return c.to_ascii_lowercase();
     }
     let code_pt: u32 = c.into();
-    if code_pt <= u16::MAX.into() {
+    if code_pt <= u16::MAX as u32 {
         let code_pt = code_pt as u16;
         match LOWERCASE_TABLE.binary_search_by(|&(key, _)| key.cmp(&code_pt)) {
             Ok(i) => unsafe { std::char::from_u32_unchecked(LOWERCASE_TABLE[i].1.into()) },
@@ -68,7 +68,7 @@ pub fn swf_char_to_uppercase(c: char) -> char {
         return c.to_ascii_uppercase();
     }
     let code_pt: u32 = c.into();
-    if code_pt <= u16::MAX.into() {
+    if code_pt <= u16::MAX as u32 {
         let code_pt = code_pt as u16;
         match UPPERCASE_TABLE.binary_search_by(|&(key, _)| key.cmp(&code_pt)) {
             Ok(i) => unsafe { std::char::from_u32_unchecked(UPPERCASE_TABLE[i].1.into()) },

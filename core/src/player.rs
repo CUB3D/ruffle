@@ -37,6 +37,7 @@ use std::collections::{HashMap, VecDeque};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
+use crate::backend::tcp::TcpBackend;
 
 pub static DEVICE_FONT_TAG: &[u8] = include_bytes!("../assets/noto-sans-definefont3.bin");
 
@@ -150,6 +151,7 @@ type Locale = Box<dyn LocaleBackend>;
 type Log = Box<dyn LogBackend>;
 type Ui = Box<dyn UiBackend>;
 type Video = Box<dyn VideoBackend>;
+type Tcp = Box<dyn TcpBackend>;
 
 pub struct Player {
     /// The version of the player we're emulating.
@@ -179,6 +181,7 @@ pub struct Player {
     log: Log,
     ui: Ui,
     video: Video,
+    tcp: Tcp,
 
     transform_stack: TransformStack,
 
@@ -240,6 +243,7 @@ impl Player {
         video: Video,
         log: Log,
         ui: Ui,
+        tcp: Tcp,
     ) -> Result<Arc<Mutex<Self>>, Error> {
         let fake_movie = Arc::new(SwfMovie::empty(NEWEST_PLAYER_VERSION));
         let movie_width = 550;
@@ -302,6 +306,7 @@ impl Player {
             log,
             ui,
             video,
+            tcp,
             self_reference: None,
             system: SystemProperties::default(),
             instance_counter: 0,
@@ -1400,6 +1405,7 @@ impl Player {
             locale,
             logging,
             video,
+            tcp,
             needs_render,
             max_execution_duration,
             current_frame,
@@ -1421,6 +1427,7 @@ impl Player {
             self.locale.deref_mut(),
             self.log.deref_mut(),
             self.video.deref_mut(),
+            self.tcp.deref_mut(),
             &mut self.needs_render,
             self.max_execution_duration,
             &mut self.current_frame,
@@ -1473,6 +1480,7 @@ impl Player {
                 locale,
                 log: logging,
                 video,
+                tcp,
                 shared_objects,
                 unbound_text_fields,
                 timers,

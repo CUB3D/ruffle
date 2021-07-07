@@ -58,6 +58,7 @@ mod text_format;
 mod transform;
 mod video;
 mod xml;
+mod net_connection;
 
 const GLOBAL_DECLS: &[Declaration] = declare_properties! {
     "isFinite" => method(is_finite; DONT_ENUM);
@@ -540,6 +541,7 @@ pub struct SystemPrototypes<'gc> {
     pub bitmap_data_constructor: Object<'gc>,
     pub video: Object<'gc>,
     pub video_constructor: Object<'gc>,
+    pub net_connection: Object<'gc>,
 }
 
 /// Initialize default global scope and builtins for an AVM1 instance.
@@ -1009,6 +1011,21 @@ pub fn create_globals<'gc>(
     globals.define_value(gc_context, "Boolean", boolean.into(), Attribute::DONT_ENUM);
     globals.define_value(gc_context, "Date", date.into(), Attribute::DONT_ENUM);
 
+    let net_connection_proto = net_connection::create_proto(gc_context, object_proto, function_proto);
+    let net_connection = FunctionObject::constructor(
+        gc_context,
+        Executable::Native(net_connection::constructor),
+        constructor_to_fn!(net_connection::constructor),
+        Some(function_proto),
+        net_connection_proto,
+    );
+    globals.define_value(
+        gc_context,
+        "NetConnection",
+        net_connection.into(),
+        Attribute::DONT_ENUM,
+    );
+
     let shared_object_proto = shared_object::create_proto(gc_context, object_proto, function_proto);
 
     let shared_obj =
@@ -1187,6 +1204,7 @@ pub fn create_globals<'gc>(
             bitmap_data_constructor: bitmap_data,
             video: video_proto,
             video_constructor: video,
+            net_connection: net_connection_proto,
         },
         globals.into(),
         broadcaster_functions,

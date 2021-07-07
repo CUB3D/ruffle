@@ -33,6 +33,7 @@ use gc_arena::{Collect, MutationContext};
 use ruffle_macros::enum_trait_object;
 use std::borrow::Cow;
 use std::fmt::Debug;
+use crate::avm1::object::net_connection::NetConnectionObject;
 
 pub mod array_object;
 pub mod bevel_filter;
@@ -58,6 +59,7 @@ pub mod value_object;
 pub mod xml_attributes_object;
 pub mod xml_idmap_object;
 pub mod xml_object;
+pub(crate) mod net_connection;
 
 /// Represents an object that can be directly interacted with by the AVM
 /// runtime.
@@ -90,6 +92,7 @@ pub mod xml_object;
         GradientGlowFilterObject(GradientGlowFilterObject<'gc>),
         DateObject(DateObject<'gc>),
         BitmapData(BitmapDataObject<'gc>),
+        NetConnection(NetConnectionObject<'gc>),
     }
 )]
 pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy {
@@ -554,6 +557,11 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
     /// Get the underlying `BitmapDataObject`, if it exists
     fn as_bitmap_data_object(&self) -> Option<BitmapDataObject<'gc>> {
+        None
+    }
+
+    /// Get the underlying `NetConnectionObject`, if it exists
+    fn as_net_connection_object(&self) -> Option<NetConnectionObject<'gc>> {
         None
     }
 

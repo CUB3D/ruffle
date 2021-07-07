@@ -415,6 +415,7 @@ swf_tests! {
     (target_clip_swf6, "avm1/target_clip_swf6", 2),
     (target_path, "avm1/target_path", 1),
     (remove_movie_clip, "avm1/remove_movie_clip", 2),
+    (net_connection, "avm1/net_connection", 1),
     (as3_add, "avm2/add", 1),
     (as3_bitor, "avm2/bitor", 1),
     (as3_bitand, "avm2/bitand", 1),

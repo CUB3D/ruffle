@@ -47,6 +47,7 @@ use winit::event::{
 };
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Icon, Window, WindowBuilder};
+use ruffle_core::backend::tcp::DesktopTcpBackend;
 
 #[derive(Clap, Debug)]
 #[clap(
@@ -279,7 +280,8 @@ impl App {
         let video = Box::new(video::SoftwareVideoBackend::new());
         let log = Box::new(log_backend::NullLogBackend::new());
         let ui = Box::new(ui::DesktopUiBackend::new(window.clone()));
-        let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
+        let tcp = Box::new(DesktopTcpBackend::default());
+        let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui, tcp)?;
 
         let movie = movie.map(|(movie, _)| Arc::new(movie));
 
@@ -545,7 +547,8 @@ fn run_timedemo(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let video = Box::new(video::NullVideoBackend::new());
     let log = Box::new(log_backend::NullLogBackend::new());
     let ui = Box::new(NullUiBackend::new());
-    let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui)?;
+    let tcp = Box::new(DesktopTcpBackend::default());
+    let player = Player::new(renderer, audio, navigator, storage, locale, video, log, ui, tcp)?;
 
     let mut player_lock = player.lock().unwrap();
     player_lock.set_root_movie(Arc::new(movie));

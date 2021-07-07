@@ -30,6 +30,7 @@ use rand::rngs::SmallRng;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
+use crate::backend::tcp::TcpBackend;
 
 /// `UpdateContext` holds shared data that is used by the various subsystems of Ruffle.
 /// `Player` creates this when it begins a tick and passes it through the call stack to
@@ -124,6 +125,9 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
 
     /// Shared objects cache
     pub shared_objects: &'a mut HashMap<String, Avm1Object<'gc>>,
+
+    // Tcp Backends
+    pub tcp: &'a mut dyn TcpBackend,
 
     /// Text fields with unbound variable bindings.
     pub unbound_text_fields: &'a mut Vec<EditText<'gc>>,
@@ -265,6 +269,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
             log: self.log,
             ui: self.ui,
             video: self.video,
+            tcp: self.tcp,
             storage: self.storage,
             rng: self.rng,
             stage: self.stage,
