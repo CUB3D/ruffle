@@ -22,6 +22,7 @@ use crate::display_object::{
 };
 use crate::events::ClipEvent;
 use crate::frame_lifecycle::catchup_display_object_to_frame;
+use crate::backend::ui::DialogResultFuture;
 use crate::player::Player;
 use crate::string::AvmString;
 use crate::tag_utils::SwfMovie;
@@ -120,7 +121,10 @@ pub enum Error {
     #[error("Non-data loader spawned as data loader")]
     NotLoadDataLoader,
 
-    #[error("Could not fetch: {0}")]
+    #[error("Non-file dialog loader spawned as file dialog loader")]
+    NotFileDialogLoader,
+
+    #[error("Could not fetch movie {0}")]
     FetchError(String),
 
     #[error("Invalid SWF: {0}")]
@@ -178,7 +182,8 @@ impl<'gc> LoadManager<'gc> {
             | Loader::Movie { self_handle, .. }
             | Loader::Form { self_handle, .. }
             | Loader::LoadVars { self_handle, .. }
-            | Loader::LoadURLLoader { self_handle, .. } => *self_handle = Some(handle),
+            | Loader::LoadURLLoader { self_handle, .. }
+            | Loader::FileDialog { self_handle, ..} => *self_handle = Some(handle),
         }
         handle
     }
@@ -306,6 +311,22 @@ impl<'gc> LoadManager<'gc> {
         let loader = self.get_loader_mut(handle).unwrap();
         loader.load_url_loader(player, request, data_format)
     }
+
+    pub fn select_file_dialog(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        target_object: Object<'gc>,
+        dialog: DialogResultFuture,
+    ) -> OwnedFuture<(), Error> {
+        let loader = Loader::FileDialog {
+            self_handle: None,
+            target_object,
+        };
+        let handle = self.add_loader(loader);
+        let loader = self.get_loader_mut(handle).unwrap();
+        //loader.file_dialog_loader(player, dialog)
+        panic!()
+    }
 }
 
 impl<'gc> Default for LoadManager<'gc> {
@@ -397,6 +418,16 @@ pub enum Loader<'gc> {
 
         /// The target `URLLoader` to load data into.
         target_object: Avm2Object<'gc>,
+    },
+
+    /// Loader that is choosing a file from an AVM1 object scope.
+    FileDialog {
+        /// The handle to refer to this loader instance.
+        #[collect(require_static)]
+        self_handle: Option<Handle>,
+
+        /// The target AVM1 object to select a file path from.
+        target_object: Object<'gc>,
     },
 }
 
@@ -1182,5 +1213,72 @@ impl<'gc> Loader<'gc> {
                 true
             }
         }
+    }
+
+    pub fn file_dialog_loader(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        dialog: DialogResultFuture,
+    ) -> OwnedFuture<(), Error> {
+        let handle = match self {
+            Loader::FileDialog { self_handle, .. } => {
+                self_handle.expect("Loader not self-introduced")
+            }
+            _ => return Box::pin(async { Err(Error::NotFileDialogLoader) }),
+        };
+
+        let player = player
+            .upgrade()
+            .expect("Could not upgrade weak reference to player");
+
+        Box::pin(async move {
+            let dialog_result = dialog.await;
+
+            // Fire the load handler.
+            player.lock().unwrap().update(|uc| -> Result<(), Error> {
+                let loader = uc.load_manager.get_loader(handle);
+                let target_object = match loader {
+                    Some(&Loader::FileDialog { target_object, .. }) => target_object,
+                    None => return Err(Error::Cancelled),
+                    _ => return Err(Error::NotFileDialogLoader),
+                };
+
+                let file_ref = target_object.as_file_reference_object().unwrap();
+
+                let mut activation = Activation::from_stub(
+                    uc.reborrow(),
+                    ActivationIdentifier::root("[File Dialog]"),
+                );
+
+                let onSelect = AvmString::new_utf8(activation.context.gc_context, "onSelect");
+                let onCancel = AvmString::new_utf8(activation.context.gc_context, "onCancel");
+
+                match dialog_result {
+                    Ok(dialog_result) => {
+                        if !dialog_result.is_cancelled() {
+                            file_ref.init_from_dialog_result(&mut activation, dialog_result);
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                onSelect,
+                            )?;
+                        } else {
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                onCancel,
+                            )?;
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!("Error on file dialog: {}", err);
+                    }
+                }
+
+                Ok(())
+            })
+        })
     }
 }

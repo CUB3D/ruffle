@@ -601,6 +601,7 @@ swf_tests! {
     (define_local, "avm1/define_local", 1),
     (define_local_with_paths, "avm1/define_local_with_paths", 1),
     (delete, "avm1/delete", 3),
+    (file_reference_browse_cancel, "avm1/file_reference_browse_cancel", 1),
     (displacement_map_filter, "avm1/displacement_map_filter", 1),
     (divide_swf4, "avm1/divide_swf4", 1),
     (do_init_action, "avm1/do_init_action", 3),
