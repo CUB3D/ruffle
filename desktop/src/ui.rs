@@ -1,8 +1,74 @@
+use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
-use rfd::{MessageButtons, MessageDialog, MessageLevel};
-use ruffle_core::backend::ui::{Error, MouseCursor, UiBackend};
+use winit::window::{Fullscreen};
+use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
+use ruffle_core::backend::ui::{
+    DialogResultFuture, Error, FileDialogResult, FileFilter, MouseCursor, UiBackend,
+};
+use ruffle_core::events::{KeyCode, PlayerEvent};
+use std::collections::HashSet;
+use std::fs;
 use std::rc::Rc;
-use winit::window::{Fullscreen, Window};
+use winit::event::{ElementState, ModifiersState, VirtualKeyCode, WindowEvent};
+use winit::window::Window;
+
+pub struct DesktopFileDialogResult {
+    handle: Option<FileHandle>,
+    md: Option<fs::Metadata>,
+}
+
+impl DesktopFileDialogResult {
+    pub fn new(handle: Option<FileHandle>) -> Self {
+        let md = handle.as_ref().and_then(|x| fs::metadata(x.path()).ok());
+        Self { handle, md }
+    }
+}
+
+impl FileDialogResult for DesktopFileDialogResult {
+    fn is_cancelled(&self) -> bool {
+        self.handle.is_none()
+    }
+
+    fn creation_time(&self) -> Option<DateTime<Utc>> {
+        if let Some(md) = &self.md {
+            md.created().ok().map(DateTime::<Utc>::from)
+        } else {
+            None
+        }
+    }
+
+    fn modification_time(&self) -> Option<DateTime<Utc>> {
+        if let Some(md) = &self.md {
+            md.modified().ok().map(DateTime::<Utc>::from)
+        } else {
+            None
+        }
+    }
+
+    fn file_name(&self) -> Option<String> {
+        self.handle.as_ref().map(|handle| handle.file_name())
+    }
+
+    fn size(&self) -> Option<u64> {
+        self.md.as_ref().map(|md| md.len())
+    }
+
+    fn file_type(&self) -> Option<String> {
+        if let Some(handle) = &self.handle {
+            handle
+                .path()
+                .extension()
+                .and_then(|x| x.to_str())
+                .map(|x| ".".to_owned() + x)
+        } else {
+            None
+        }
+    }
+
+    fn creator(&self) -> Option<String> {
+        None
+    }
+}
 
 pub struct DesktopUiBackend {
     window: Rc<Window>,
@@ -89,5 +155,31 @@ impl UiBackend for DesktopUiBackend {
             .set_description(message)
             .set_buttons(MessageButtons::Ok);
         dialog.show();
+    }
+
+    fn display_file_dialog(&self, filters: Vec<FileFilter>) -> DialogResultFuture {
+        Box::pin(async move {
+            let mut dialog = AsyncFileDialog::new();
+
+            for filter in filters {
+                if std::env::consts::OS == "macos" && filter.mac_type.is_some() {
+                    let mac_type = filter.mac_type.unwrap();
+                    let extensions: Vec<&str> = mac_type.split(';').collect();
+                    dialog = dialog.add_filter(&filter.description, &extensions);
+                } else {
+                    let extensions: Vec<&str> = filter
+                        .extensions
+                        .split(';')
+                        .map(|x| x.trim_start_matches("*."))
+                        .collect();
+                    dialog = dialog.add_filter(&filter.description, &extensions);
+                }
+            }
+
+            let result: Result<Box<dyn FileDialogResult>, Error> = Ok(Box::new(
+                DesktopFileDialogResult::new(dialog.pick_file().await),
+            ));
+            result
+        })
     }
 }

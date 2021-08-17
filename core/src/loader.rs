@@ -2,7 +2,6 @@
 
 use crate::avm1::activation::{Activation, ActivationIdentifier};
 use crate::avm1::function::ExecutionReason;
-use crate::avm1::{Avm1, Object, TObject, Value};
 use crate::avm2::bytearray::ByteArrayStorage;
 use crate::avm2::names::Namespace;
 use crate::avm2::object::ByteArrayObject;
@@ -19,7 +18,10 @@ use crate::display_object::{
     Bitmap, DisplayObject, TDisplayObject, TDisplayObjectContainer, TInteractiveObject,
 };
 use crate::events::ClipEvent;
-use crate::player::Player;
+use crate::avm1::globals::as_broadcaster;
+use crate::avm1::{Avm1, Object, TObject, Value};
+use crate::backend::ui::DialogResultFuture;
+use crate::player::{Player, NEWEST_PLAYER_VERSION};
 use crate::string::AvmString;
 use crate::tag_utils::SwfMovie;
 use crate::vminterface::Instantiator;
@@ -116,7 +118,10 @@ pub enum Error {
     #[error("Non-data loader spawned as data loader")]
     NotLoadDataLoader,
 
-    #[error("Could not fetch: {0}")]
+    #[error("Non-file dialog loader spawned as file dialog loader")]
+    NotFileDialogLoader,
+
+    #[error("Could not fetch movie {0}")]
     FetchError(String),
 
     #[error("Invalid SWF")]
@@ -294,6 +299,24 @@ impl<'gc> LoadManager<'gc> {
         let loader = self.get_loader_mut(handle).unwrap();
         loader.load_url_loader(player, request, data_format)
     }
+
+    pub fn select_file_dialog(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        target_object: Object<'gc>,
+        dialog: DialogResultFuture,
+    ) -> OwnedFuture<(), Error> {
+        let loader = Loader::FileDialog {
+            self_handle: None,
+            target_object,
+        };
+        let handle = self.add_loader(loader);
+
+        let loader = self.get_loader_mut(handle).unwrap();
+        loader.introduce_loader_handle(handle);
+
+        loader.file_dialog_loader(player, dialog)
+    }
 }
 
 impl<'gc> Default for LoadManager<'gc> {
@@ -379,9 +402,34 @@ pub enum Loader<'gc> {
         /// The target `URLLoader` to load data into.
         target_object: Avm2Object<'gc>,
     },
+
+    /// Loader that is choosing a file from an AVM1 object scope.
+    FileDialog {
+        /// The handle to refer to this loader instance.
+        #[collect(require_static)]
+        self_handle: Option<Handle>,
+
+        /// The target AVM1 object to select a file path from.
+        target_object: Object<'gc>,
+    },
 }
 
 impl<'gc> Loader<'gc> {
+
+    /// Set the loader handle for this loader.
+    ///
+    /// An active loader handle is required before asynchronous loader code can
+    /// run.
+    pub fn introduce_loader_handle(&mut self, handle: Handle) {
+        match self {
+            Loader::RootMovie { self_handle, .. } => *self_handle = Some(handle),
+            Loader::Movie { self_handle, .. } => *self_handle = Some(handle),
+            Loader::Form { self_handle, .. } => *self_handle = Some(handle),
+            Loader::LoadVars { self_handle, .. } => *self_handle = Some(handle),
+            Loader::FileDialog { self_handle, .. } => *self_handle = Some(handle),
+        }
+    }
+
     /// Construct a future for the root movie loader.
     fn root_movie_loader(
         &mut self,
