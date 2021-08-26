@@ -11,6 +11,7 @@ clap = "3.0.0-beta.2"
 cpal = "0.13.4"
 ruffle_core = { path = "../core" }
 ruffle_render_wgpu = { path = "../render/wgpu", features = ["clap"] }
+ruffle_render_skia = { path = "../render/skia" }
 env_logger = "0.9.0"
 generational-arena = "0.2.8"
 log = "0.4"

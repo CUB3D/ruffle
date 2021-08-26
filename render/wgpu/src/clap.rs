@@ -3,6 +3,7 @@ use clap::Clap;
 #[derive(Copy, Clone, Clap, PartialEq, Debug)]
 pub enum GraphicsBackend {
     Default,
+    Software,
     Vulkan,
     Metal,
     Dx12,
@@ -17,6 +18,7 @@ impl From<GraphicsBackend> for wgpu::BackendBit {
             GraphicsBackend::Metal => wgpu::BackendBit::METAL,
             GraphicsBackend::Dx12 => wgpu::BackendBit::DX12,
             GraphicsBackend::Dx11 => wgpu::BackendBit::DX11,
+            _ => unreachable!("Software rendering with wgpu is not supported")
         }
     }
 }

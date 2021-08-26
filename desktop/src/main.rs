@@ -47,6 +47,8 @@ use winit::event::{
 };
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Icon, Window, WindowBuilder};
+use ruffle_core::backend::render::RenderBackend;
+use ruffle_render_skia::SkiaRenderBackend;
 
 #[derive(Clap, Debug)]
 #[clap(
@@ -193,6 +195,13 @@ struct App {
 impl App {
     const DEFAULT_WINDOW_SIZE: LogicalSize<f64> = LogicalSize::new(1280.0, 720.0);
 
+    // //TODO:
+    // fn render_backend(opt: &Opt, window: &Window, ) -> Result<Box<dyn RenderBackend>, Box<dyn std::error::Error>>  {
+    //     Ok(match opt.graphics {
+    //
+    //     })
+    // }
+
     fn new(opt: Opt) -> Result<Self, Box<dyn std::error::Error>> {
         let movie = if let Some(path) = opt.input_path.to_owned() {
             Some(load_movie_from_path(&path, &opt)?)
@@ -255,13 +264,22 @@ impl App {
         let viewport_scale_factor = window.scale_factor();
 
         let window = Rc::new(window);
-        let renderer = Box::new(WgpuRenderBackend::for_window(
-            window.as_ref(),
-            (viewport_size.width, viewport_size.height),
-            opt.graphics.into(),
-            opt.power.into(),
-            trace_path(&opt),
-        )?);
+        // let renderer = render_backend(&opt)?;
+        let renderer: Box<dyn RenderBackend> = match opt.graphics {
+            GraphicsBackend::Software => {
+                Box::new(SkiaRenderBackend::new(window.as_ref(), &event_loop))
+            }
+            _ => {
+                Box::new(WgpuRenderBackend::for_window(
+                    window.as_ref(),
+                    (viewport_size.width, viewport_size.height),
+                    opt.graphics.into(),
+                    opt.power.into(),
+                    trace_path(&opt),
+                )?)
+            }
+        };
+
         let audio: Box<dyn AudioBackend> = match audio::CpalAudioBackend::new() {
             Ok(audio) => Box::new(audio),
             Err(e) => {
