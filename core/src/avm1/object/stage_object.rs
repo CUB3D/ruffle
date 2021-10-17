@@ -29,8 +29,8 @@ pub struct StageObjectData<'gc> {
     /// well as the underlying prototype chain.
     base: ScriptObject<'gc>,
 
-    /// The display node this stage object
-    display_object: DisplayObject<'gc>,
+    /// The path to the display object that this object references.
+    path: AvmString<'gc>,
 
     text_field_bindings: Vec<TextFieldBinding<'gc>>,
 }
@@ -46,7 +46,7 @@ impl<'gc> StageObject<'gc> {
             gc_context,
             StageObjectData {
                 base: ScriptObject::new(gc_context, Some(proto)),
-                display_object,
+                path: AvmString::new(gc_context, display_object.path()),
                 text_field_bindings: Vec::new(),
             },
         ))
@@ -106,10 +106,10 @@ impl<'gc> StageObject<'gc> {
         if name.eq_with_case(b"_root", case_sensitive) {
             return Some(activation.root_object());
         } else if name.eq_with_case(b"_parent", case_sensitive) {
+            let display_object = self.as_display_object(activation)?;
+
             return Some(
-                self.0
-                    .read()
-                    .display_object
+                    display_object
                     .avm1_parent()
                     .map(|dn| dn.object().coerce_to_object(activation))
                     .map(Value::Object)
@@ -160,6 +160,39 @@ impl<'gc> StageObject<'gc> {
     }
 }
 
+impl<'gc> StageObjectData<'gc> {
+    /// Dereferences this object and returns the display object it refers to.
+    ///
+    /// Returns `None` if the path no longer resolve to a valid display object.
+    fn as_display_object(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_>,
+    ) -> Option<DisplayObject<'gc>> {
+        let mut path_iter = self.path.split(b'.');
+
+        let mut level = None;
+        let name = path_iter.next()?;
+        if let Some(slice) = name.slice(..6) {
+            let level_prefix = WStr::from_units(b"_level");
+            if slice == level_prefix {
+                if let Some(level_id) = name.slice(6..).and_then(|v| v.parse::<i32>().ok()) {
+                    level = activation.context
+                        .stage
+                        .child_by_depth(level_id);
+                }
+            }
+        }
+        let mut display_object = level?;
+
+        for name in path_iter {
+            display_object = display_object
+                .as_container()
+                .and_then(|container| container.child_by_name(name, true))?;
+        }
+        Some(display_object)
+    }
+}
+
 /// A binding from a property of this StageObject to an EditText text field.
 #[derive(Collect)]
 #[collect(no_drop)]
@@ -173,7 +206,7 @@ impl fmt::Debug for StageObject<'_> {
         let o = self.0.read();
         f.debug_struct("StageObject")
             .field("base", &o.base)
-            .field("display_object", &o.display_object)
+            .field("path", &o.path)
             .finish()
     }
 }
@@ -202,9 +235,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
             }
         }
 
+        let display_object = self.as_display_object(activation)?;
+
         // 3) Child display objects with the given instance name
-        if let Some(child) = obj
-            .display_object
+        if let Some(child) = display_object
             .as_container()
             .and_then(|o| o.child_by_name(&name, activation.is_case_sensitive()))
         {
@@ -214,7 +248,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         // 4) Display object properties such as `_x`, `_y` (never case sensitive)
         if magic_property {
             if let Some(property) = props.read().get_by_name(name) {
-                return Some(property.get(activation, obj.display_object));
+                return Some(property.get(activation, display_object));
             }
         }
 
@@ -230,7 +264,11 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     ) -> Result<(), Error<'gc>> {
         let obj = self.0.read();
         let props = activation.context.avm1.display_properties();
-
+        let display_object = if let Some(display_object) = obj.as_display_object(activation) {
+            display_object
+        } else {
+            return Ok(());
+        };
         // Check if a text field is bound to this property and update the text if so.
         let case_sensitive = activation.is_case_sensitive();
         for binding in obj.text_field_bindings.iter().filter(|binding| {
@@ -247,7 +285,6 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         }
 
         let base = obj.base;
-        let display_object = obj.display_object;
         drop(obj);
 
         if base.has_own_property(activation, name) {
@@ -270,7 +307,14 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         this: Value<'gc>,
         args: &[Value<'gc>],
     ) -> Result<Value<'gc>, Error<'gc>> {
-        self.0.read().base.call(name, activation, this, args)
+        if self.as_display_object(activation).is_none() {
+            return Ok(Value::Undefined);
+        }
+
+        self.0
+            .read()
+            .base
+            .call(name, activation, this, args)
     }
 
     fn getter(
@@ -278,6 +322,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         name: AvmString<'gc>,
         activation: &mut Activation<'_, 'gc, '_>,
     ) -> Option<Object<'gc>> {
+        self.as_display_object(activation)?;
         self.0.read().base.getter(name, activation)
     }
 
@@ -286,6 +331,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         name: AvmString<'gc>,
         activation: &mut Activation<'_, 'gc, '_>,
     ) -> Option<Object<'gc>> {
+        self.as_display_object(activation)?;
         self.0.read().base.setter(name, activation)
     }
 
@@ -299,10 +345,18 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     }
 
     fn delete(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         self.0.read().base.delete(activation, name)
     }
 
     fn proto(&self, activation: &mut Activation<'_, 'gc, '_>) -> Value<'gc> {
+        if self.as_display_object(activation).is_none() {
+            return Value::Undefined;
+        }
+
         self.0.read().base.proto(activation)
     }
 
@@ -369,6 +423,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         value: &mut Value<'gc>,
         this: Object<'gc>,
     ) -> Result<(), Error<'gc>> {
+        if self.as_display_object(activation).is_none() {
+            return Ok(());
+        }
+
         self.0
             .read()
             .base
@@ -382,6 +440,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         callback: Object<'gc>,
         user_data: Value<'gc>,
     ) {
+        if self.as_display_object(activation).is_none() {
+            return;
+        }
+
         self.0
             .read()
             .base
@@ -389,11 +451,21 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     }
 
     fn unwatch(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         self.0.read().base.unwatch(activation, name)
     }
 
     fn has_property(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
         let obj = self.0.read();
+        let display_object = if let Some(display_object) = obj.as_display_object(activation) {
+            display_object
+        } else {
+            return false;
+        };
+
         if obj.base.has_property(activation, name) {
             return true;
         }
@@ -412,8 +484,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         }
 
         let case_sensitive = activation.is_case_sensitive();
-        if obj
-            .display_object
+        if display_object
             .as_container()
             .and_then(|o| o.child_by_name(&name, case_sensitive))
             .is_some()
@@ -433,6 +504,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
         name: AvmString<'gc>,
     ) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         // Note that `hasOwnProperty` does NOT return true for child display objects.
         self.0.read().base.has_own_property(activation, name)
     }
@@ -442,6 +517,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
         name: AvmString<'gc>,
     ) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         self.0.read().base.has_own_virtual(activation, name)
     }
 
@@ -450,6 +529,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
         name: AvmString<'gc>,
     ) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         self.0.read().base.is_property_enumerable(activation, name)
     }
 
@@ -457,9 +540,15 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         // Keys from the underlying object are listed first, followed by
         // child display objects in order from highest depth to lowest depth.
         let obj = self.0.read();
+        let display_object = if let Some(display_object) = obj.as_display_object(activation) {
+            display_object
+        } else {
+            return vec![];
+        };
+
         let mut keys = obj.base.get_keys(activation);
 
-        if let Some(ctr) = obj.display_object.as_container() {
+        if let Some(ctr) = display_object.as_container() {
             keys.extend(ctr.iter_render_list().rev().map(|child| child.name()));
         }
 
@@ -467,6 +556,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     }
 
     fn length(&self, activation: &mut Activation<'_, 'gc, '_>) -> Result<i32, Error<'gc>> {
+        if self.as_display_object(activation).is_none() {
+            return Ok(0);
+        }
+
         self.0.read().base.length(activation)
     }
 
@@ -475,14 +568,26 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
         length: i32,
     ) -> Result<(), Error<'gc>> {
+        if self.as_display_object(activation).is_none() {
+            return Ok(());
+        }
+
         self.0.read().base.set_length(activation, length)
     }
 
     fn has_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         self.0.read().base.has_element(activation, index)
     }
 
     fn get_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> Value<'gc> {
+        if self.as_display_object(activation).is_none() {
+            return Value::Undefined;
+        }
+
         self.0.read().base.get_element(activation, index)
     }
 
@@ -492,10 +597,18 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         index: i32,
         value: Value<'gc>,
     ) -> Result<(), Error<'gc>> {
+        if self.as_display_object(activation).is_none() {
+            return Ok(());
+        }
+
         self.0.read().base.set_element(activation, index, value)
     }
 
     fn delete_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> bool {
+        if self.as_display_object(activation).is_none() {
+            return false;
+        }
+
         self.0.read().base.delete_element(activation, index)
     }
 
@@ -519,8 +632,11 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         Some(*self)
     }
 
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
-        Some(self.0.read().display_object)
+    fn as_display_object(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_>,
+    ) -> Option<DisplayObject<'gc>> {
+        self.0.read().as_display_object(activation)
     }
 
     fn as_ptr(&self) -> *const ObjectPtr {

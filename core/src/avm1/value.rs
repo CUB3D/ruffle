@@ -184,7 +184,7 @@ impl<'gc> Value<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         Ok(match self {
-            Value::Object(object) if object.as_display_object().is_none() => {
+            Value::Object(object) if object.as_display_object(activation).is_none() => {
                 object.call_method("valueOf".into(), &[], activation, ExecutionReason::Special)?
             }
             val => val.to_owned(),
@@ -249,11 +249,11 @@ impl<'gc> Value<'gc> {
         // This is the common case for objects because `Object.prototype.valueOf` returns the same object.
         // For example, `{} < {}` is false.
         let prim_self = self.to_primitive_num(activation)?;
-        if matches!(prim_self, Value::Object(o) if o.as_display_object().is_none()) {
+        if matches!(prim_self, Value::Object(o) if o.as_display_object(activation).is_none()) {
             return Ok(false.into());
         }
         let prim_other = other.to_primitive_num(activation)?;
-        if matches!(prim_other, Value::Object(o) if o.as_display_object().is_none()) {
+        if matches!(prim_other, Value::Object(o) if o.as_display_object(activation).is_none()) {
             return Ok(false.into());
         }
 
@@ -385,7 +385,7 @@ impl<'gc> Value<'gc> {
             Value::Bool(true) if activation.swf_version() < 5 => "1".into(),
             Value::Bool(false) if activation.swf_version() < 5 => "0".into(),
             Value::Object(object) => {
-                if let Some(object) = object.as_display_object() {
+                if let Some(object) = object.as_display_object(activation) {
                     // StageObjects are special-cased to return their path.
                     AvmString::new(activation.context.gc_context, object.path())
                 } else {
@@ -435,7 +435,7 @@ impl<'gc> Value<'gc> {
         }
     }
 
-    pub fn type_of(&self) -> &'static str {
+    pub fn type_of(&self, activation: &mut Activation<'_, 'gc, '_>) -> &'static str {
         match self {
             Value::Undefined => "undefined",
             Value::Null => "null",
@@ -446,7 +446,7 @@ impl<'gc> Value<'gc> {
             // MovieClips have a special typeof "movieclip", while others have the default "object".
             Value::Object(object)
                 if object
-                    .as_display_object()
+                    .as_display_object(activation)
                     .and_then(|o| o.as_movie_clip())
                     .is_some() =>
             {

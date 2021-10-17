@@ -13,7 +13,7 @@ use swf::BlendMode;
 macro_rules! button_getter {
     ($name:ident) => {
         |activation, this, _args| {
-            if let Some(display_object) = this.as_display_object() {
+            if let Some(display_object) = this.as_display_object(activation) {
                 if let Some(button) = display_object.as_avm1_button() {
                     return $name(button, activation);
                 }
@@ -26,7 +26,7 @@ macro_rules! button_getter {
 macro_rules! button_setter {
     ($name:ident) => {
         |activation, this, args| {
-            if let Some(display_object) = this.as_display_object() {
+            if let Some(display_object) = this.as_display_object(activation) {
                 if let Some(button) = display_object.as_avm1_button() {
                     let value = args.get(0).unwrap_or(&Value::Undefined).clone();
                     $name(button, activation, value)?;

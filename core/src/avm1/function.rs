@@ -145,14 +145,14 @@ impl<'gc> Avm1Function<'gc> {
         self.register_count
     }
 
-    fn debug_string_for_call(&self, name: ExecutionName<'gc>, args: &[Value<'gc>]) -> String {
+    fn debug_string_for_call(&self, activation: &mut Activation<'_, 'gc, '_>, name: ExecutionName<'gc>, args: &[Value<'gc>]) -> String {
         let mut result = match self.name.map(ExecutionName::Dynamic).unwrap_or(name) {
             ExecutionName::Static(n) => n.to_owned(),
             ExecutionName::Dynamic(n) => n.to_utf8_lossy().into_owned(),
         };
         result.push('(');
         for i in 0..args.len() {
-            result.push_str(args.get(i).unwrap().type_of());
+            result.push_str(args.get(i).unwrap().type_of(activation));
             if i < args.len() - 1 {
                 result.push_str(", ");
             }
@@ -366,7 +366,7 @@ impl<'gc> Executable<'gc> {
                 af.base_clip
             } else {
                 this_obj
-                    .and_then(|this| this.as_display_object())
+                    .and_then(|this| this.as_display_object(activation))
                     .unwrap_or(target)
             };
         let (swf_version, parent_scope) = if is_closure {
@@ -410,7 +410,7 @@ impl<'gc> Executable<'gc> {
         let arguments_caller = activation.callee;
 
         let name = if cfg!(feature = "avm_debug") {
-            Cow::Owned(af.debug_string_for_call(name, args))
+            Cow::Owned(af.debug_string_for_call(activation, name, args))
         } else {
             Cow::Borrowed("[Anonymous]")
         };

@@ -27,7 +27,7 @@ use swf::{
 macro_rules! mc_method {
     ( $fn:expr ) => {
         |activation, this, args| {
-            if let Some(display_object) = this.as_display_object() {
+            if let Some(display_object) = this.as_display_object(activation) {
                 if let Some(movie_clip) = display_object.as_movie_clip() {
                     return $fn(movie_clip, activation, args);
                 }
@@ -40,7 +40,7 @@ macro_rules! mc_method {
 macro_rules! mc_getter {
     ( $get:expr ) => {
         |activation, this, _args| {
-            if let Some(display_object) = this.as_display_object() {
+            if let Some(display_object) = this.as_display_object(activation) {
                 if let Some(movie_clip) = display_object.as_movie_clip() {
                     return $get(movie_clip, activation);
                 }
@@ -53,7 +53,7 @@ macro_rules! mc_getter {
 macro_rules! mc_setter {
     ( $set:expr ) => {
         |activation, this, args| {
-            if let Some(display_object) = this.as_display_object() {
+            if let Some(display_object) = this.as_display_object(activation) {
                 if let Some(movie_clip) = display_object.as_movie_clip() {
                     let value = args.get(0).unwrap_or(&Value::Undefined).clone();
                     $set(movie_clip, activation, value)?;
@@ -991,7 +991,10 @@ pub fn goto_frame<'gc>(
             if let Some((clip, frame)) =
                 activation.resolve_variable_path(movie_clip.into(), &frame_path)?
             {
-                if let Some(clip) = clip.as_display_object().and_then(|o| o.as_movie_clip()) {
+                if let Some(clip) = clip
+                    .as_display_object(activation)
+                    .and_then(|o| o.as_movie_clip())
+                {
                     if let Ok(frame) = frame.parse().map(f64_to_wrapping_i32) {
                         // First try to parse as a frame number.
                         call_frame = Some((clip, frame));
@@ -1049,7 +1052,7 @@ fn remove_movie_clip<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     // `removeMovieClip` can remove all types of display object,
     // e.g. `MovieClip.prototype.removeMovieClip.apply(textField);`
-    if let Some(this) = this.as_display_object() {
+    if let Some(this) = this.as_display_object(activation) {
         crate::avm1::globals::remove_display_object(this, activation);
     }
 
@@ -1065,7 +1068,7 @@ fn set_mask<'gc>(
         .get(0)
         .unwrap_or(&Value::Undefined)
         .coerce_to_object(activation)
-        .as_display_object();
+        .as_display_object(activation);
     let mc = DisplayObject::MovieClip(movie_clip);
     let context = &mut activation.context;
     mc.set_clip_depth(context.gc_context, 0);

@@ -521,7 +521,7 @@ pub fn draw<'gc>(
                 .get(0)
                 .unwrap_or(&Value::Undefined)
                 .coerce_to_object(activation);
-            let source = if let Some(source_object) = source.as_display_object() {
+            let source = if let Some(source_object) = source.as_display_object(activation) {
                 IBitmapDrawable::DisplayObject(source_object)
             } else if let Some(source_bitmap) = source.as_bitmap_data_object() {
                 IBitmapDrawable::BitmapData(source_bitmap.bitmap_data())

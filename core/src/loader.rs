@@ -874,7 +874,7 @@ impl<'gc> Loader<'gc> {
                 }
 
                 // Fire the onData method and event.
-                if let Some(display_object) = that.as_display_object() {
+                if let Some(display_object) = that.as_display_object(&mut activation) {
                     if let Some(movie_clip) = display_object.as_movie_clip() {
                         activation.context.action_queue.queue_actions(
                             movie_clip.into(),

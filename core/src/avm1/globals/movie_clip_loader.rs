@@ -55,7 +55,7 @@ fn load_clip<'gc>(
                     // TODO: What happens with negative levels?
                     Some(activation.resolve_level(*level_id as i32))
                 }
-                Value::Object(object) => object.as_display_object(),
+                Value::Object(object) => object.as_display_object(activation),
                 _ => None,
             };
             if let Some(target) = target {
@@ -94,7 +94,7 @@ fn unload_clip<'gc>(
                 // TODO: What happens with negative levels?
                 activation.context.stage.child_by_depth(*level_id as i32)
             }
-            Value::Object(object) => object.as_display_object(),
+            Value::Object(object) => object.as_display_object(activation),
             _ => None,
         };
         if let Some(target) = target {
@@ -127,8 +127,9 @@ fn get_progress<'gc>(
                 // TODO: What happens with negative levels?
                 activation.context.stage.child_by_depth(*level_id as i32)
             }
-            Value::Object(object) if object.as_display_object().is_some() => {
-                object.as_display_object()
+            Value::Object(object) if object.as_display_object(activation).is_some() => {
+                object.as_display_object(activation)
+
             }
             _ => return Ok(Value::Undefined),
         };

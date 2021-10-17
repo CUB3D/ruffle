@@ -1330,8 +1330,7 @@ impl<'gc> EditText<'gc> {
 
     /// Construct the text field's AVM1 representation.
     fn construct_as_avm1_object(&self, context: &mut UpdateContext<'_, 'gc, '_>, run_frame: bool) {
-        let mut text = self.0.write(context.gc_context);
-        if text.object.is_none() {
+        if self.0.read().object.is_none() {
             let object: Avm1Object<'gc> = Avm1StageObject::for_display_object(
                 context.gc_context,
                 (*self).into(),
@@ -1339,9 +1338,8 @@ impl<'gc> EditText<'gc> {
             )
             .into();
 
-            text.object = Some(object.into());
+            self.0.write(context.gc_context).object = Some(object.into());
         }
-        drop(text);
 
         Avm1::run_with_stack_frame_for_display_object((*self).into(), context, |activation| {
             // If this text field has a variable set, initialize text field binding.
