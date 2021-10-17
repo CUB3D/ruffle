@@ -1661,7 +1661,8 @@ impl<'gc> MovieClip<'gc> {
         let mc = self.0.read();
         let tag_stream_start = mc.static_data.swf.as_ref().as_ptr() as u64;
         let mut frame_pos = mc.tag_stream_pos;
-        let data = mc.static_data.swf.clone();
+        let data = Box::new(mc.static_data.swf.clone());
+        let data = Box::leak(data);
         let mut index = 0;
 
         // Sanity; let's make sure we don't seek way too far.
