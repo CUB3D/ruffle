@@ -1038,18 +1038,18 @@ dependencies = [
 
 [[package]]
 name = "enum-map"
-version = "1.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88acdb627a242ba1bf36653fa200f72c037ca3324e0710d1ac4fee809a1539cd"
+checksum = "4daa8ce58bdc96f86eb90b4b8eab8f1e051da02f8c564389ae2b8ce38932f758"
 dependencies = [
  "enum-map-derive",
 ]
 
 [[package]]
 name = "enum-map-derive"
-version = "0.5.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2dccd930f0c0a8968d873b10d3611f71bffc4dff84879dabf7b746b0686ea81"
+checksum = "a63b7a0ddec6f38dcec5e36257750b7a8fcaf4227e12ceb306e341d63634da05"
 dependencies = [
  "proc-macro2",
  "quote",
