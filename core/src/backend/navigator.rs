@@ -7,6 +7,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use swf::avm1::types::SendVarsMethod;
+use thiserror::Error;
 use url::{ParseError, Url};
 
 /// Attempt to convert a relative URL into an absolute URL, using the base URL
@@ -111,6 +112,23 @@ pub struct Response {
 
     /// The contents of the response body.
     pub body: Vec<u8>,
+}
+
+/// An error response from a fetch request
+#[derive(Debug, Error)]
+pub enum FetchError {
+    /// The domain could not be resolved, either because it is invalid or a DNS error occurred
+    #[error("Failed to resolve host name")]
+    InvalidDomain,
+
+    /// The destination returned a status code that indicated a failure
+    /// * `body` contains the bytes of the HTTP body
+    #[error("Destination returned an unsuccessful status code")]
+    UnsuccessfulStatusCode { body: Vec<u8> },
+
+    /// Some other error occurred
+    #[error("Other fetch error {0}")]
+    Other(String),
 }
 
 /// Type alias for pinned, boxed, and owned futures that output a falliable
@@ -296,10 +314,11 @@ impl NavigatorBackend for NullNavigatorBackend {
 
         Box::pin(async move {
             let url = Self::url_from_file_path(&path)
-                .map_err(|()| Error::FetchError("Invalid URL".to_string()))?
+                .map_err(|()| Error::FetchError(FetchError::Other("Invalid URL".to_string())))?
                 .into();
 
-            let body = std::fs::read(path).map_err(|e| Error::FetchError(e.to_string()))?;
+            let body = std::fs::read(path)
+                .map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
 
             Ok(Response { url, body })
         })

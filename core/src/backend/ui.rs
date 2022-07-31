@@ -1,22 +1,31 @@
 use crate::events::{KeyCode, PlayerEvent};
-use std::collections::HashSet;
+pub use crate::loader::Error as LoaderError;
 use chrono::{DateTime, Utc};
 use downcast_rs::Downcast;
+use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
-pub use crate::loader::Error as LoaderError;
 
 /// Type alias for pinned, boxed, and owned futures that output a falliable
 /// result of type `Result<T, E>`.
 pub type OwnedFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + 'static>>;
 
+/// A filter specifying a category that can be selected from a file chooser dialog
 pub struct FileFilter {
+    /// The description of the catagory
     pub description: String,
+    /// A semicolon ';' delimited list of acceptable windows file extensions that can be selected
+    /// in this category, with a */wildcard before each extension
     pub extensions: String,
+    /// A semicolon ';' delimited list of acceptable MacOs file extensions that can be selected in
+    /// this category, with a */wildcard before each extension
+    /// Note that a list of file filters will either all have Some(_) mac_type or all will have None
     pub mac_type: Option<String>,
 }
 
+/// A result of a file selection
 pub trait FileDialogResult: Downcast {
+    /// Was the file selection canceled by the user
     fn is_cancelled(&self) -> bool;
     fn creation_time(&self) -> Option<DateTime<Utc>>;
     fn modification_time(&self) -> Option<DateTime<Utc>>;
@@ -24,9 +33,18 @@ pub trait FileDialogResult: Downcast {
     fn size(&self) -> Option<u64>;
     fn file_type(&self) -> Option<String>;
     fn creator(&self) -> Option<String>;
+    fn contents(&self) -> &[u8];
+    /// Write the given data to the chosen file
+    /// This will not necessarily by reflected in future calls to other functions (such as [FileDialogResult::size]),
+    /// until [FileDialogResult::refresh] is called
+    fn write(&self, data: &[u8]);
+    /// Refresh any internal metadata, any future calls to other functions (such as [FileDialogResult::size]) will reflect
+    /// the state at the time of the last refresh
+    fn refresh(&mut self);
 }
 impl_downcast!(FileDialogResult);
 
+/// Future representing a file selection in process
 pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
 
 pub type Error = Box<dyn std::error::Error>;
@@ -56,8 +74,23 @@ pub trait UiBackend {
     // Unused, but kept in case we need it later.
     fn message(&self, message: &str);
 
-    /// Displays a file dialog
-    fn display_file_dialog(&self, filters: Vec<FileFilter>) -> DialogResultFuture;
+    /// Displays a file selection dialog, returning None if the dialog cannot be displayed
+    /// (e.g because it is already open)
+    /// * `filters` represents a list of filters to the possible file types that can be selected
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
+
+    /// Display a dialog allowing a user to select a destination to save a file to
+    ///
+    /// * `file_name` is a suggestion for the file name to save the file as
+    /// * `title` is a title that should be displayed in the dialog
+    fn display_file_save_dialog(
+        &mut self,
+        file_name: String,
+        title: String,
+    ) -> Option<DialogResultFuture>;
+
+    /// Mark that any previously open dialog has been closed
+    fn close_file_dialog(&mut self);
 }
 
 /// A mouse cursor icon displayed by the Flash Player.
@@ -179,12 +212,25 @@ impl UiBackend for NullUiBackend {
 
     fn message(&self, _message: &str) {}
 
-    fn display_file_dialog(&self, _filters: Vec<FileFilter>) -> DialogResultFuture {
-        Box::pin(async move {
+    fn display_file_open_dialog(
+        &mut self,
+        _filters: Vec<FileFilter>,
+    ) -> Option<DialogResultFuture> {
+        Some(Box::pin(async move {
             let result: Result<Box<dyn FileDialogResult>, LoaderError> =
                 Ok(Box::new(NullFileDialogResult::new()));
             result
-        })
+        }))
+    }
+
+    fn close_file_dialog(&mut self) {}
+
+    fn display_file_save_dialog(
+        &mut self,
+        _file_name: String,
+        _domain: String,
+    ) -> Option<DialogResultFuture> {
+        None
     }
 }
 
@@ -231,4 +277,11 @@ impl FileDialogResult for NullFileDialogResult {
     fn creator(&self) -> Option<String> {
         None
     }
+
+    fn contents(&self) -> &[u8] {
+        &[]
+    }
+
+    fn write(&self, _data: &[u8]) {}
+    fn refresh(&mut self) {}
 }

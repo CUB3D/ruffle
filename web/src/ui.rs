@@ -1,13 +1,11 @@
 use super::JavascriptPlayer;
 use rfd::{AsyncFileDialog, FileHandle};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, MouseCursor, UiBackend,
+    DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
 };
-use ruffle_core::events::KeyCode;
 use ruffle_web_common::JsResult;
-use std::collections::HashSet;
 use std::path::Path;
-use web_sys::{HtmlCanvasElement, KeyboardEvent};
+use web_sys::HtmlCanvasElement;
 
 use chrono::{DateTime, Utc};
 
@@ -31,15 +29,20 @@ impl std::error::Error for FullScreenError {
     }
 }
 
-
-
 pub struct WebFileDialogResult {
     handle: Option<FileHandle>,
+    contents: Vec<u8>,
 }
 
 impl WebFileDialogResult {
-    pub fn new(handle: Option<FileHandle>) -> Self {
-        Self { handle }
+    pub async fn new(handle: Option<FileHandle>) -> Self {
+        let contents = if let Some(handle) = handle.as_ref() {
+            handle.read().await
+        } else {
+            Vec::new()
+        };
+
+        Self { handle, contents }
     }
 }
 
@@ -111,6 +114,16 @@ impl FileDialogResult for WebFileDialogResult {
     fn creator(&self) -> Option<String> {
         None
     }
+
+    fn contents(&self) -> &[u8] {
+        &self.contents
+    }
+
+    fn write(&self, _data: &[u8]) {
+        //NOOP
+    }
+
+    fn refresh(&mut self) {}
 }
 
 /// An implementation of `UiBackend` utilizing `web_sys` bindings to input APIs.
@@ -119,6 +132,8 @@ pub struct WebUiBackend {
     canvas: HtmlCanvasElement,
     cursor_visible: bool,
     cursor: MouseCursor,
+    /// Is a dialog currently open
+    dialog_open: bool,
 }
 
 impl WebUiBackend {
@@ -128,6 +143,7 @@ impl WebUiBackend {
             canvas: canvas.clone(),
             cursor_visible: true,
             cursor: MouseCursor::Arrow,
+            dialog_open: false,
         }
     }
 
@@ -191,8 +207,15 @@ impl UiBackend for WebUiBackend {
         self.js_player.display_message(message);
     }
 
-    fn display_file_dialog(&self, filters: Vec<FileFilter>) -> DialogResultFuture {
-        Box::pin(async move {
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+        // Prevent opening multiple dialogs at the same time
+        if self.dialog_open {
+            return None;
+        }
+        self.dialog_open = true;
+
+        // Create the dialog future
+        Some(Box::pin(async move {
             let mut dialog = AsyncFileDialog::new();
 
             for filter in filters {
@@ -210,9 +233,22 @@ impl UiBackend for WebUiBackend {
                 }
             }
 
-            let result: Result<Box<dyn FileDialogResult>, Error> =
-                Ok(Box::new(WebFileDialogResult::new(dialog.pick_file().await)));
+            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
+                WebFileDialogResult::new(dialog.pick_file().await).await,
+            ));
             result
-        })
+        }))
+    }
+
+    fn close_file_dialog(&mut self) {
+        self.dialog_open = false;
+    }
+
+    fn display_file_save_dialog(
+        &mut self,
+        _file_name: String,
+        _domain: String,
+    ) -> Option<DialogResultFuture> {
+        None
     }
 }

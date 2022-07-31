@@ -1,26 +1,35 @@
 use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
-use winit::window::{Fullscreen};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, MouseCursor, UiBackend,
+    DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
 };
-use ruffle_core::events::{KeyCode, PlayerEvent};
-use std::collections::HashSet;
 use std::fs;
 use std::rc::Rc;
-use winit::event::{ElementState, ModifiersState, VirtualKeyCode, WindowEvent};
+use winit::window::Fullscreen;
 use winit::window::Window;
 
 pub struct DesktopFileDialogResult {
     handle: Option<FileHandle>,
     md: Option<fs::Metadata>,
+    contents: Vec<u8>,
 }
 
 impl DesktopFileDialogResult {
+    /// Create a new [`DesktopFileDialogResult`] from a given file handle
     pub fn new(handle: Option<FileHandle>) -> Self {
         let md = handle.as_ref().and_then(|x| fs::metadata(x.path()).ok());
-        Self { handle, md }
+
+        let contents = handle
+            .as_ref()
+            .and_then(|handle| fs::read(handle.path()).ok())
+            .unwrap_or_default();
+
+        Self {
+            handle,
+            md,
+            contents,
+        }
     }
 }
 
@@ -68,12 +77,40 @@ impl FileDialogResult for DesktopFileDialogResult {
     fn creator(&self) -> Option<String> {
         None
     }
+
+    fn contents(&self) -> &[u8] {
+        &self.contents
+    }
+
+    fn write(&self, data: &[u8]) {
+        if let Some(handle) = &self.handle {
+            let _ = fs::write(handle.path(), data);
+        }
+    }
+
+    fn refresh(&mut self) {
+        let md = self
+            .handle
+            .as_ref()
+            .and_then(|x| fs::metadata(x.path()).ok());
+
+        let contents = if let Some(handle) = &self.handle {
+            fs::read(handle.path()).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        self.md = md;
+        self.contents = contents;
+    }
 }
 
 pub struct DesktopUiBackend {
     window: Rc<Window>,
     cursor_visible: bool,
     clipboard: ClipboardContext,
+    /// Is a dialog currently open
+    dialog_open: bool,
 }
 
 impl DesktopUiBackend {
@@ -82,6 +119,7 @@ impl DesktopUiBackend {
             window,
             cursor_visible: true,
             clipboard: ClipboardProvider::new().unwrap(),
+            dialog_open: false,
         }
     }
 }
@@ -157,8 +195,15 @@ impl UiBackend for DesktopUiBackend {
         dialog.show();
     }
 
-    fn display_file_dialog(&self, filters: Vec<FileFilter>) -> DialogResultFuture {
-        Box::pin(async move {
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+        // Prevent opening multiple dialogs at the same time
+        if self.dialog_open {
+            return None;
+        }
+        self.dialog_open = true;
+
+        // Create the dialog future
+        Some(Box::pin(async move {
             let mut dialog = AsyncFileDialog::new();
 
             for filter in filters {
@@ -176,10 +221,39 @@ impl UiBackend for DesktopUiBackend {
                 }
             }
 
-            let result: Result<Box<dyn FileDialogResult>, Error> = Ok(Box::new(
+            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
                 DesktopFileDialogResult::new(dialog.pick_file().await),
             ));
             result
-        })
+        }))
+    }
+
+    fn display_file_save_dialog(
+        &mut self,
+        file_name: String,
+        title: String,
+    ) -> Option<DialogResultFuture> {
+        // Prevent opening multiple dialogs at the same time
+        if self.dialog_open {
+            return None;
+        }
+        self.dialog_open = true;
+
+        // Create the dialog future
+        Some(Box::pin(async move {
+            // Select the location to save the file to
+            let dialog = AsyncFileDialog::new()
+                .set_title(&title)
+                .set_file_name(&file_name);
+
+            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
+                DesktopFileDialogResult::new(dialog.save_file().await),
+            ));
+            result
+        }))
+    }
+
+    fn close_file_dialog(&mut self) {
+        self.dialog_open = false;
     }
 }

@@ -1,7 +1,8 @@
 //! Navigator backend for web
 use js_sys::{Array, ArrayBuffer, Uint8Array};
 use ruffle_core::backend::navigator::{
-    url_from_relative_url, NavigationMethod, NavigatorBackend, OwnedFuture, Request, Response,
+    url_from_relative_url, FetchError, NavigationMethod, NavigatorBackend, OwnedFuture, Request,
+    Response,
 };
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
@@ -212,20 +213,25 @@ impl NavigatorBackend for WebNavigatorBackend {
                 init.body(Some(&datablob));
             }
 
-            let request = WebRequest::new_with_str_and_init(&url, &init)
-                .map_err(|_| Error::FetchError(format!("Unable to create request for {}", url)))?;
+            let request = WebRequest::new_with_str_and_init(&url, &init).map_err(|_| {
+                Error::FetchError(FetchError::Other(format!(
+                    "Unable to create request for {}",
+                    url
+                )))
+            })?;
 
             let window = web_sys::window().unwrap();
             let fetchval = JsFuture::from(window.fetch_with_request(&request))
                 .await
-                .map_err(|_| Error::FetchError("Got JS error".to_string()))?;
+                .map_err(|_| Error::FetchError(FetchError::Other("Got JS error".to_string())))?;
 
             let response: WebResponse = fetchval.dyn_into().unwrap();
             if !response.ok() {
-                return Err(Error::FetchError(format!(
-                    "HTTP status is not ok, got {}",
-                    response.status_text()
-                )));
+                log::warn!("HTTP status is not ok, got {}", response.status_text());
+
+                return Err(Error::FetchError(FetchError::UnsuccessfulStatusCode {
+                    body: Vec::new(),
+                }));
             }
 
             let url = response.url();
@@ -233,7 +239,9 @@ impl NavigatorBackend for WebNavigatorBackend {
             let body: ArrayBuffer = JsFuture::from(response.array_buffer().unwrap())
                 .await
                 .map_err(|_| {
-                    Error::FetchError("Could not allocate array buffer for response".to_string())
+                    Error::FetchError(FetchError::Other(
+                        "Could not allocate array buffer for response".to_string(),
+                    ))
                 })?
                 .dyn_into()
                 .unwrap();

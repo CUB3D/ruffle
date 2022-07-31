@@ -2,10 +2,15 @@
 //!
 //! Trace output can be compared with correct output from the official Flash Player.
 
+pub mod test_navigator;
+pub mod test_ui;
+
+use crate::test_navigator::TestNavigatorBackend;
+use crate::test_ui::TestUiBackend;
 use approx::assert_relative_eq;
 use ruffle_core::backend::{
     log::LogBackend,
-    navigator::{NullExecutor, NullNavigatorBackend},
+    navigator::NullExecutor,
     storage::{MemoryStorageBackend, StorageBackend},
 };
 use ruffle_core::context::UpdateContext;
@@ -549,11 +554,14 @@ swf_tests! {
     (define_local, "avm1/define_local", 1),
     (define_local_with_paths, "avm1/define_local_with_paths", 1),
     (delete, "avm1/delete", 3),
-    (this_scoping, "avm1/this_scoping", 1),
-    (bevel_filter, "avm1/bevel_filter", 1),
     (file_reference_browse_cancel, "avm1/file_reference_browse_cancel", 1),
-    (drop_shadow_filter, "avm1/drop_shadow_filter", 1),
-    (color_matrix_filter, "avm1/color_matrix_filter", 1),
+    (file_reference_download_success, "avm1/file_reference_download_success", 1),
+    (file_reference_download_cancel, "avm1/file_reference_download_cancel", 1),
+    (file_reference_download_httperror_status_code, "avm1/file_reference_download_httperror_status_code", 1),
+    (file_reference_download_httperror_dns_error, "avm1/file_reference_download_httperror_dns_error", 1),
+    (file_reference_upload_success, "avm1/file_reference_upload_success", 1),
+    (file_reference_upload_httperror_dns_error, "avm1/file_reference_upload_httperror_dns_error", 1),
+    (file_reference_upload_httperror_status_code, "avm1/file_reference_upload_httperror_status_code", 1),
     (displacement_map_filter, "avm1/displacement_map_filter", 1),
     (divide_swf4, "avm1/divide_swf4", 1),
     (do_init_action, "avm1/do_init_action", 3),
@@ -1244,8 +1252,9 @@ fn run_swf(
 
     let player = builder
         .with_log(TestLogBackend::new(trace_output.clone()))
-        .with_navigator(NullNavigatorBackend::with_base_path(base_path, &executor))
+        .with_navigator(TestNavigatorBackend::with_base_path(base_path, &executor))
         .with_max_execution_duration(Duration::from_secs(300))
+        .with_ui(TestUiBackend::default())
         .with_movie(movie)
         .build();
 

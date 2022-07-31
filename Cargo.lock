@@ -2967,6 +2967,31 @@ checksum = "f1382d1f0a252c4bf97dc20d979a2fdd05b024acd7c2ed0f7595d7817666a157"
 
 [[package]]
 name = "rfd"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f121348fd3b9035ed11be1f028e8944263c30641f8c5deacf57a4320782fb402"
+dependencies = [
+ "block",
+ "dispatch",
+ "embed-resource",
+ "glib-sys",
+ "gobject-sys",
+ "gtk-sys",
+ "js-sys",
+ "lazy_static",
+ "log",
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "raw-window-handle 0.4.3",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows",
+]
+
+[[package]]
+name = "rfd"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0149778bd99b6959285b0933288206090c50e2327f47a9c463bfdbf45c8823ea"
@@ -3062,6 +3087,7 @@ dependencies = [
 name = "ruffle_desktop"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "clipboard",
  "cpal",
@@ -3071,7 +3097,7 @@ dependencies = [
  "generational-arena",
  "isahc",
  "log",
- "rfd",
+ "rfd 0.10.0",
  "ruffle_core",
  "ruffle_render_wgpu",
  "url",
@@ -3182,6 +3208,7 @@ dependencies = [
  "getrandom",
  "js-sys",
  "log",
+ "rfd 0.9.1",
  "ruffle_core",
  "ruffle_render_canvas",
  "ruffle_render_webgl",
@@ -3611,6 +3638,7 @@ name = "tests"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "chrono",
  "env_logger",
  "futures",
  "image",
@@ -3618,6 +3646,7 @@ dependencies = [
  "ruffle_core",
  "ruffle_input_format",
  "ruffle_render_wgpu",
+ "url",
 ]
 
 [[package]]
