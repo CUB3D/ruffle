@@ -183,7 +183,7 @@ impl<'gc> LoadManager<'gc> {
             | Loader::Form { self_handle, .. }
             | Loader::LoadVars { self_handle, .. }
             | Loader::LoadURLLoader { self_handle, .. }
-            | Loader::FileDialog { self_handle, ..} => *self_handle = Some(handle),
+            | Loader::FileDialog { self_handle, .. } => *self_handle = Some(handle),
         }
         handle
     }

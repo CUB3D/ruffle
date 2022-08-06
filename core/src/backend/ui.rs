@@ -1,11 +1,11 @@
 use crate::events::{KeyCode, PlayerEvent};
 use std::borrow::Cow;
 use std::collections::HashSet;
+pub use crate::loader::Error as LoaderError;
 use chrono::{DateTime, Utc};
 use downcast_rs::Downcast;
 use std::future::Future;
 use std::pin::Pin;
-pub use crate::loader::Error as LoaderError;
 
 /// Type alias for pinned, boxed, and owned futures that output a falliable
 /// result of type `Result<T, E>`.

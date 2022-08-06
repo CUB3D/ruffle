@@ -159,32 +159,48 @@ pub fn browse<'gc>(
         Some(Value::Object(array)) => {
             // Array of filter objects.
             let length = array.length(activation)?;
-            let vec: Result<Vec<_>, Error<'gc>> = (0..length)
-                .map(|i| {
-                    if let Value::Object(element) = array.get_element(activation, i) {
-                        let mac_type = if let Ok(val) = element.get("macType", activation) {
-                            Some(val.coerce_to_string(activation)?.to_string())
-                        } else {
-                            None
-                        };
 
-                        Ok(FileFilter {
-                            description: element
-                                .get("description", activation)?
-                                .coerce_to_string(activation)?
-                                .to_string(),
-                            extensions: element
-                                .get("extension", activation)?
-                                .coerce_to_string(activation)?
-                                .to_string(),
-                            mac_type,
-                        })
+            // Empty array is not allowed
+            if length == 0 {
+                return Ok(false.into());
+            }
+
+            let mut results = Vec::with_capacity(length as usize);
+
+            for i in 0..length {
+                if let Value::Object(element) = array.get_element(activation, i) {
+                    let mac_type = if let Ok(val) = element.get("macType", activation) {
+                        Some(val.coerce_to_string(activation)?.to_string())
                     } else {
-                        Err(Error::ThrownValue("Unexpected filter value".into()))
+                        None
+                    };
+
+                    let description = element
+                        .get("description", activation)?
+                        .coerce_to_string(activation)?
+                        .to_string();
+
+                    let extensions = element
+                        .get("extension", activation)?
+                        .coerce_to_string(activation)?
+                        .to_string();
+
+                    // Empty strings are not allowed for desc / extension
+                    if description.is_empty() || extensions.is_empty() {
+                        return Ok(false.into());
                     }
-                })
-                .collect();
-            vec?
+
+                    results.push(FileFilter {
+                        description,
+                        extensions,
+                        mac_type,
+                    });
+                } else {
+                    return Err(Error::ThrownValue("Unexpected filter value".into()));
+                }
+            }
+
+            results
         }
         None => Vec::new(),
         _ => return Ok(Value::Undefined),
@@ -205,7 +221,6 @@ pub fn browse<'gc>(
         }
         None => false,
     };
-
 
     Ok(result.into())
 }

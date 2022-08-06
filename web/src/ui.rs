@@ -29,8 +29,6 @@ impl std::error::Error for FullScreenError {
     }
 }
 
-
-
 pub struct WebFileDialogResult {
     handle: Option<FileHandle>,
 }
@@ -192,7 +190,6 @@ impl UiBackend for WebUiBackend {
     }
 
     fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
-
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
