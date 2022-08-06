@@ -11,9 +11,16 @@ pub use crate::loader::Error as LoaderError;
 /// result of type `Result<T, E>`.
 pub type OwnedFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + 'static>>;
 
+/// A filter specifying a category that can be selected from a file chooser dialog
 pub struct FileFilter {
+    /// The description of the catagory
     pub description: String,
+    /// A semicolon ';' delimited list of acceptable windows file extensions that can be selected
+    /// in this category, with a */wildcard before each extension
     pub extensions: String,
+    /// A semicolon ';' delimited list of acceptable MacOs file extensions that can be selected in
+    /// this category, with a */wildcard before each extension
+    /// Note that a list of file filters will either all have Some(_) mac_type or all will have None
     pub mac_type: Option<String>,
 }
 
@@ -57,8 +64,12 @@ pub trait UiBackend {
     // Unused, but kept in case we need it later.
     fn message(&self, message: &str);
 
-    /// Displays a file dialog
-    fn display_file_dialog(&self, filters: Vec<FileFilter>) -> DialogResultFuture;
+    /// Displays a file dialog, returning None if the dialog cannot be displayed
+    /// (e.g because it is already open)
+    fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
+
+    /// Mark that any previously open dialog has been closed
+    fn close_file_dialog(&mut self);
 }
 
 /// A mouse cursor icon displayed by the Flash Player.
@@ -180,13 +191,15 @@ impl UiBackend for NullUiBackend {
 
     fn message(&self, _message: &str) {}
 
-    fn display_file_dialog(&self, _filters: Vec<FileFilter>) -> DialogResultFuture {
-        Box::pin(async move {
+    fn display_file_dialog(&mut self, _filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+        Some(Box::pin(async move {
             let result: Result<Box<dyn FileDialogResult>, LoaderError> =
                 Ok(Box::new(NullFileDialogResult::new()));
             result
-        })
+        }))
     }
+
+    fn close_file_dialog(&mut self) {}
 }
 
 impl Default for NullUiBackend {

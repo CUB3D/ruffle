@@ -324,8 +324,7 @@ impl<'gc> LoadManager<'gc> {
         };
         let handle = self.add_loader(loader);
         let loader = self.get_loader_mut(handle).unwrap();
-        //loader.file_dialog_loader(player, dialog)
-        panic!()
+        loader.file_dialog_loader(player, dialog)
     }
 }
 
@@ -1234,6 +1233,9 @@ impl<'gc> Loader<'gc> {
         Box::pin(async move {
             let dialog_result = dialog.await;
 
+            // Dialog is done, allow opening new dialogs
+            player.lock().unwrap().ui_mut().close_file_dialog();
+
             // Fire the load handler.
             player.lock().unwrap().update(|uc| -> Result<(), Error> {
                 let loader = uc.load_manager.get_loader(handle);
@@ -1250,25 +1252,27 @@ impl<'gc> Loader<'gc> {
                     ActivationIdentifier::root("[File Dialog]"),
                 );
 
-                let onSelect = AvmString::new_utf8(activation.context.gc_context, "onSelect");
-                let onCancel = AvmString::new_utf8(activation.context.gc_context, "onCancel");
+                let on_select = AvmString::new_utf8(activation.context.gc_context, "onSelect");
+                let on_cancel = AvmString::new_utf8(activation.context.gc_context, "onCancel");
 
                 match dialog_result {
                     Ok(dialog_result) => {
+                        use crate::avm1::globals::as_broadcaster;
+
                         if !dialog_result.is_cancelled() {
                             file_ref.init_from_dialog_result(&mut activation, dialog_result);
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
                                 &[target_object.into()],
-                                onSelect,
+                                on_select,
                             )?;
                         } else {
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
                                 &[target_object.into()],
-                                onCancel,
+                                on_cancel,
                             )?;
                         }
                     }

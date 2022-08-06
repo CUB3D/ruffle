@@ -12,7 +12,7 @@ use std::str;
 
 mod accessibility;
 mod array;
-pub(crate) mod as_broadcaster;
+pub mod as_broadcaster;
 mod bevel_filter;
 mod bitmap_data;
 mod bitmap_filter;

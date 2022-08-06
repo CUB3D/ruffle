@@ -117,6 +117,8 @@ pub struct WebUiBackend {
     canvas: HtmlCanvasElement,
     cursor_visible: bool,
     cursor: MouseCursor,
+    /// Is a dialog currently open
+    dialog_open: bool,
 }
 
 impl WebUiBackend {
@@ -126,6 +128,7 @@ impl WebUiBackend {
             canvas: canvas.clone(),
             cursor_visible: true,
             cursor: MouseCursor::Arrow,
+            dialog_open: false,
         }
     }
 
@@ -188,8 +191,16 @@ impl UiBackend for WebUiBackend {
         self.js_player.display_message(message);
     }
 
-    fn display_file_dialog(&self, filters: Vec<FileFilter>) -> DialogResultFuture {
-        Box::pin(async move {
+    fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+
+        // Prevent opening multiple dialogs at the same time
+        if self.dialog_open {
+            return None;
+        }
+        self.dialog_open = true;
+
+        // Create the dialog future
+        Some(Box::pin(async move {
             let mut dialog = AsyncFileDialog::new();
 
             for filter in filters {
@@ -210,6 +221,10 @@ impl UiBackend for WebUiBackend {
             let result: Result<Box<dyn FileDialogResult>, LoaderError> =
                 Ok(Box::new(WebFileDialogResult::new(dialog.pick_file().await)));
             result
-        })
+        }))
+    }
+
+    fn close_file_dialog(&mut self) {
+        self.dialog_open = false;
     }
 }

@@ -191,15 +191,23 @@ pub fn browse<'gc>(
     };
 
     let dialog = activation.context.ui.display_file_dialog(file_filters);
-    let process = activation.context.load_manager.select_file_dialog(
-        activation.context.player.clone(),
-        this,
-        dialog,
-    );
 
-    activation.context.navigator.spawn_future(process);
+    let result = match dialog {
+        Some(dialog) => {
+            let process = activation.context.load_manager.select_file_dialog(
+                activation.context.player.clone(),
+                this,
+                dialog,
+            );
 
-    Ok(Value::Null)
+            activation.context.navigator.spawn_future(process);
+            true
+        }
+        None => false,
+    };
+
+
+    Ok(result.into())
 }
 
 pub fn cancel<'gc>(
