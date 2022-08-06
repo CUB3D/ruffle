@@ -8,6 +8,7 @@ use crate::avm_warn;
 use crate::backend::ui::FileFilter;
 use crate::string::AvmString;
 use gc_arena::MutationContext;
+use url::Url;
 
 // There are two undocumented functions in FileReference: convertToPPT and deleteConvertedPPT.
 // Until further reason is given, they will be unimplemented.
@@ -236,11 +237,56 @@ pub fn cancel<'gc>(
 
 pub fn download<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
+    this: Object<'gc>,
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    avm_warn!(activation, "FileReference.download() not implemented");
-    Ok(Value::Undefined)
+
+    if let Some(url) = args.first() {
+        let url_string = url.coerce_to_string(activation)?.to_string();
+
+        // Invalid domain should bail out with false
+        let url = match Url::parse(&url_string) {
+            Ok(url) => url,
+            Err(_) => return Ok(false.into())
+        };
+
+        let file_name = match args.get(1) {
+            Some(file_name) => {
+                file_name.coerce_to_string(activation)?.to_string()
+            }
+            None => {
+                // Try to get the end of the path as a file name, if we can't bail and return false
+                match url.path().split("/").last() {
+                    Some(path_end) => path_end.to_string(),
+                    None => {
+                        return Ok(false.into())
+                    }
+                }
+            }
+        };
+
+        let domain = url.domain().unwrap_or("<unknown domain>").to_string();
+
+        // Create and spawn dialog
+        let dialog = activation.context.ui.display_file_download_dialog(url_string, file_name, domain);
+        let result = match dialog {
+            Some(dialog) => {
+                let process = activation.context.load_manager.download_file_dialog(
+                    activation.context.player.clone(),
+                    this,
+                    dialog
+                );
+
+                activation.context.navigator.spawn_future(process);
+                true
+            }
+            None => false,
+        };
+
+        return Ok(result.into());
+    }
+
+    Ok(false.into())
 }
 
 pub fn upload<'gc>(

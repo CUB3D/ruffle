@@ -24,6 +24,7 @@ use crate::events::ClipEvent;
 use crate::frame_lifecycle::catchup_display_object_to_frame;
 use crate::backend::ui::DialogResultFuture;
 use crate::player::Player;
+use crate::backend::ui::DownloadDialogResultFuture;
 use crate::string::AvmString;
 use crate::tag_utils::SwfMovie;
 use crate::vminterface::Instantiator;
@@ -124,6 +125,9 @@ pub enum Error {
     #[error("Non-file dialog loader spawned as file dialog loader")]
     NotFileDialogLoader,
 
+    #[error("Non-file download dialog loader spawned as file download dialog loader")]
+    NotFileDownloadDialogLoader,
+
     #[error("Could not fetch movie {0}")]
     FetchError(String),
 
@@ -183,7 +187,8 @@ impl<'gc> LoadManager<'gc> {
             | Loader::Form { self_handle, .. }
             | Loader::LoadVars { self_handle, .. }
             | Loader::LoadURLLoader { self_handle, .. }
-            | Loader::FileDialog { self_handle, .. } => *self_handle = Some(handle),
+            | Loader::FileDialog { self_handle, .. }
+            | Loader::DownloadFileDialog { self_handle, .. } => *self_handle = Some(handle),
         }
         handle
     }
@@ -312,6 +317,10 @@ impl<'gc> LoadManager<'gc> {
         loader.load_url_loader(player, request, data_format)
     }
 
+    /// Display a dialog allowing a user to select a file
+    ///
+    /// Returns a future that will be resolved when a file is selected
+    #[must_use]
     pub fn select_file_dialog(
         &mut self,
         player: Weak<Mutex<Player>>,
@@ -325,6 +334,25 @@ impl<'gc> LoadManager<'gc> {
         let handle = self.add_loader(loader);
         let loader = self.get_loader_mut(handle).unwrap();
         loader.file_dialog_loader(player, dialog)
+    }
+
+    /// Display a dialog allowing a user to download a file
+    ///
+    /// Returns a future that will be resolved when a file is selected and the download has completed
+    #[must_use]
+    pub fn download_file_dialog(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        target_object: Object<'gc>,
+        dialog: DownloadDialogResultFuture
+    ) -> OwnedFuture<(), Error> {
+        let loader = Loader::DownloadFileDialog {
+            self_handle: None,
+            target_object,
+        };
+        let handle = self.add_loader(loader);
+        let loader = self.get_loader_mut(handle).unwrap();
+        loader.file_download_dialog_loader(player, dialog)
     }
 }
 
@@ -421,6 +449,16 @@ pub enum Loader<'gc> {
 
     /// Loader that is choosing a file from an AVM1 object scope.
     FileDialog {
+        /// The handle to refer to this loader instance.
+        #[collect(require_static)]
+        self_handle: Option<Handle>,
+
+        /// The target AVM1 object to select a file path from.
+        target_object: Object<'gc>,
+    },
+
+    /// Loader that is downloading a file from an AVM1 object scope.
+    DownloadFileDialog {
         /// The handle to refer to this loader instance.
         #[collect(require_static)]
         self_handle: Option<Handle>,
@@ -1277,9 +1315,81 @@ impl<'gc> Loader<'gc> {
                         }
                     }
                     Err(err) => {
-                        log::warn!("Error on file dialog: {}", err);
+                        log::warn!("Error on file dialog: {:?}", err);
                     }
                 }
+
+                Ok(())
+            })
+        })
+    }
+
+    pub fn file_download_dialog_loader(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        dialog: DownloadDialogResultFuture,
+    ) -> OwnedFuture<(), Error> {
+        let handle = match self {
+            Loader::DownloadFileDialog { self_handle, .. } => {
+                self_handle.expect("Loader not self-introduced")
+            }
+            _ => return Box::pin(async { Err(Error::NotFileDownloadDialogLoader) }),
+        };
+
+        let player = player
+            .upgrade()
+            .expect("Could not upgrade weak reference to player");
+
+        Box::pin(async move {
+            let dialog_result = dialog.await;
+
+            // Dialog is done, allow opening new dialogs
+            player.lock().unwrap().ui_mut().close_file_dialog();
+
+            // Fire the load handler.
+            player.lock().unwrap().update(|uc| -> Result<(), Error> {
+                let loader = uc.load_manager.get_loader(handle);
+                let target_object = match loader {
+                    Some(&Loader::FileDialog { target_object, .. }) => target_object,
+                    None => return Err(Error::Cancelled),
+                    _ => return Err(Error::NotFileDialogLoader),
+                };
+
+                let file_ref = target_object.as_file_reference_object().unwrap();
+
+                let mut activation = Activation::from_stub(
+                    uc.reborrow(),
+                    ActivationIdentifier::root("[File Dialog]"),
+                );
+
+                //TODO: do the right callbacks here
+
+                let on_select = AvmString::new_utf8(activation.context.gc_context, "onSelect");
+                let on_cancel = AvmString::new_utf8(activation.context.gc_context, "onCancel");
+
+                /*match dialog_result {
+                    Ok(dialog_result) => {
+                        if !dialog_result.is_cancelled() {
+                            file_ref.init_from_dialog_result(&mut activation, dialog_result);
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                on_select,
+                            )?;
+                        } else {
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                on_cancel,
+                            )?;
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!("Error on file dialog: {}", err);
+                    }
+                }*/
 
                 Ok(())
             })

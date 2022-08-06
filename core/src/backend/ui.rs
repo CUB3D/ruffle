@@ -36,6 +36,7 @@ pub trait FileDialogResult: Downcast {
 impl_downcast!(FileDialogResult);
 
 pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
+pub type DownloadDialogResultFuture = OwnedFuture<Box<()>, LoaderError>;
 
 pub type FullscreenError = Cow<'static, str>;
 
@@ -67,6 +68,14 @@ pub trait UiBackend {
     /// Displays a file dialog, returning None if the dialog cannot be displayed
     /// (e.g because it is already open)
     fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
+
+    /// Display a dialog allowing a user to select a location to download a file to
+    ///
+    /// * `url` is the file name to download
+    /// * `file_name` is a suggestion for the file name to save the file as
+    /// * `domain` is the domain of the url being accessed, this should be displayed in the
+    /// title of the dialog
+    fn display_file_download_dialog(&mut self, url: String, file_name: String, domain: String) -> Option<DownloadDialogResultFuture> { None }
 
     /// Mark that any previously open dialog has been closed
     fn close_file_dialog(&mut self);

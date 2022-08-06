@@ -3,8 +3,11 @@ use clipboard::{ClipboardContext, ClipboardProvider};
 
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::DownloadDialogResultFuture;
+use ruffle_core::events::PlayerEvent;
 use std::fs;
 use std::rc::Rc;
+use isahc::AsyncReadResponseExt;
 use winit::window::Fullscreen;
 use winit::window::Window;
 
@@ -186,6 +189,38 @@ impl UiBackend for DesktopUiBackend {
                 DesktopFileDialogResult::new(dialog.pick_file().await),
             ));
             result
+        }))
+    }
+
+    fn display_file_download_dialog(&mut self, url: String, file_name: String, domain: String) -> Option<DownloadDialogResultFuture> {
+        // Prevent opening multiple dialogs at the same time
+        if self.dialog_open {
+            return None;
+        }
+        self.dialog_open = true;
+
+        println!("Download file started");
+
+        // Create the dialog future
+        Some(Box::pin(async move {
+
+            // Select the location to save the file to
+            let mut dialog = AsyncFileDialog::new()
+                // TODO: get domain from url
+                .set_title(&format!("Select location for download from {}", domain))
+                .set_file_name(&file_name);
+            //TODO: unwrap
+
+            println!("Starting pick file?");
+
+            let file_selection = dialog.save_file().await.unwrap();
+            //TODO: unwrap
+            let mut http_res = isahc::get_async(url).await.unwrap();
+
+            //TODO: unwrap x2
+            let _ = fs::write(file_selection.path(),&http_res.bytes().await.unwrap()).unwrap();
+
+            return Ok(Box::new(()))
         }))
     }
 
