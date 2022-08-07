@@ -1290,9 +1290,6 @@ impl<'gc> Loader<'gc> {
                     ActivationIdentifier::root("[File Dialog]"),
                 );
 
-                let on_select = AvmString::new_utf8(activation.context.gc_context, "onSelect");
-                let on_cancel = AvmString::new_utf8(activation.context.gc_context, "onCancel");
-
                 match dialog_result {
                     Ok(dialog_result) => {
                         use crate::avm1::globals::as_broadcaster;
@@ -1303,14 +1300,14 @@ impl<'gc> Loader<'gc> {
                                 &mut activation,
                                 target_object,
                                 &[target_object.into()],
-                                on_select,
+                                "onSelect".into(),
                             )?;
                         } else {
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
                                 &[target_object.into()],
-                                on_cancel,
+                                "onCancel".into(),
                             )?;
                         }
                     }
@@ -1350,9 +1347,9 @@ impl<'gc> Loader<'gc> {
             player.lock().unwrap().update(|uc| -> Result<(), Error> {
                 let loader = uc.load_manager.get_loader(handle);
                 let target_object = match loader {
-                    Some(&Loader::FileDialog { target_object, .. }) => target_object,
+                    Some(&Loader::DownloadFileDialog { target_object, .. }) => target_object,
                     None => return Err(Error::Cancelled),
-                    _ => return Err(Error::NotFileDialogLoader),
+                    _ => return Err(Error::NotFileDownloadDialogLoader),
                 };
 
                 let file_ref = target_object.as_file_reference_object().unwrap();
@@ -1361,35 +1358,65 @@ impl<'gc> Loader<'gc> {
                     uc.reborrow(),
                     ActivationIdentifier::root("[File Dialog]"),
                 );
+                use crate::avm1::globals::as_broadcaster;
 
-                //TODO: do the right callbacks here
+                match dialog_result {
+                    Ok(download_result) => {
+                        if let Some(download_result) = download_result {
 
-                let on_select = AvmString::new_utf8(activation.context.gc_context, "onSelect");
-                let on_cancel = AvmString::new_utf8(activation.context.gc_context, "onCancel");
+                            let initial_dialog_result = download_result.initial_dialog_result;
+                            let dialog_result = download_result.dialog_result;
+                            let total_bytes = download_result.download_size;
 
-                /*match dialog_result {
-                    Ok(dialog_result) => {
-                        if !dialog_result.is_cancelled() {
-                            file_ref.init_from_dialog_result(&mut activation, dialog_result);
+                            // onSelect and onOpen should be called before the download begins
+                            // We simulate this by using the initial dialog result
+                            file_ref.init_from_dialog_result(&mut activation, initial_dialog_result);
+
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
                                 &[target_object.into()],
-                                on_select,
+                                "onSelect".into(),
+                            )?;
+
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onOpen".into(),
+                            )?;
+
+                            // onProgress and onComplete expect to recieve the current state
+                            // of the file, as we simulate an instant 100% download from the
+                            // perspective of AS, we can just use the result after the data is written
+                            file_ref.init_from_dialog_result(&mut activation, dialog_result);
+
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into(), total_bytes.into(), total_bytes.into()],
+                                "onProgress".into(),
+                            )?;
+
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onComplete".into(),
                             )?;
                         } else {
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
                                 &[target_object.into()],
-                                on_cancel,
+                                "onCancel".into(),
                             )?;
                         }
                     }
                     Err(err) => {
                         log::warn!("Error on file dialog: {}", err);
                     }
-                }*/
+                }
 
                 Ok(())
             })

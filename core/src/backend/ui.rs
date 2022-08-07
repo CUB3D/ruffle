@@ -35,8 +35,22 @@ pub trait FileDialogResult: Downcast {
 }
 impl_downcast!(FileDialogResult);
 
+
+/// Struct representing details about a completed download
+pub struct DownloadDialogResult {
+    /// The details of the selected download destination, before its contents are modified by
+    /// the download
+    /// Needed as the onSelect/onOpen callbacks expect the details of the selected file prior to
+    /// being overwritten with download data
+    pub initial_dialog_result: Box<dyn FileDialogResult>,
+    /// The details of the selection of the destination file
+    pub dialog_result: Box<dyn FileDialogResult>,
+    /// The amount of dat that was downloaded in bytes
+    pub download_size: usize,
+}
+
 pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
-pub type DownloadDialogResultFuture = OwnedFuture<Box<()>, LoaderError>;
+pub type DownloadDialogResultFuture = OwnedFuture<Option<DownloadDialogResult>, LoaderError>;
 
 pub type FullscreenError = Cow<'static, str>;
 
@@ -75,7 +89,7 @@ pub trait UiBackend {
     /// * `file_name` is a suggestion for the file name to save the file as
     /// * `domain` is the domain of the url being accessed, this should be displayed in the
     /// title of the dialog
-    fn display_file_download_dialog(&mut self, url: String, file_name: String, domain: String) -> Option<DownloadDialogResultFuture> { None }
+    fn display_file_download_dialog(&mut self, url: String, file_name: String, domain: String) -> Option<DownloadDialogResultFuture>;
 
     /// Mark that any previously open dialog has been closed
     fn close_file_dialog(&mut self);
@@ -209,6 +223,10 @@ impl UiBackend for NullUiBackend {
     }
 
     fn close_file_dialog(&mut self) {}
+
+    fn display_file_download_dialog(&mut self, _url: String, _file_name: String, _domain: String) -> Option<DownloadDialogResultFuture> {
+        None
+    }
 }
 
 impl Default for NullUiBackend {

@@ -1,13 +1,13 @@
 use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
-
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
-use ruffle_core::backend::ui::DownloadDialogResultFuture;
-use ruffle_core::events::PlayerEvent;
+use isahc::AsyncReadResponseExt;
+use ruffle_core::backend::ui::{
+     DownloadDialogResult, DownloadDialogResultFuture
+};
 use std::fs;
 use std::rc::Rc;
-use isahc::AsyncReadResponseExt;
 use winit::window::Fullscreen;
 use winit::window::Window;
 
@@ -17,6 +17,7 @@ pub struct DesktopFileDialogResult {
 }
 
 impl DesktopFileDialogResult {
+    /// Create a new [`DesktopFileDialogResult`] from a given file handle
     pub fn new(handle: Option<FileHandle>) -> Self {
         let md = handle.as_ref().and_then(|x| fs::metadata(x.path()).ok());
         Self { handle, md }
@@ -192,35 +193,57 @@ impl UiBackend for DesktopUiBackend {
         }))
     }
 
-    fn display_file_download_dialog(&mut self, url: String, file_name: String, domain: String) -> Option<DownloadDialogResultFuture> {
+    fn display_file_download_dialog(
+        &mut self,
+        url: String,
+        file_name: String,
+        domain: String,
+    ) -> Option<DownloadDialogResultFuture> {
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
         }
         self.dialog_open = true;
 
-        println!("Download file started");
-
         // Create the dialog future
         Some(Box::pin(async move {
-
             // Select the location to save the file to
-            let mut dialog = AsyncFileDialog::new()
-                // TODO: get domain from url
+            let dialog = AsyncFileDialog::new()
                 .set_title(&format!("Select location for download from {}", domain))
                 .set_file_name(&file_name);
-            //TODO: unwrap
 
-            println!("Starting pick file?");
+            let file_selection = match dialog.save_file().await {
+                Some(x) => x,
+                None => return Ok(None),
+            };
 
-            let file_selection = dialog.save_file().await.unwrap();
-            //TODO: unwrap
-            let mut http_res = isahc::get_async(url).await.unwrap();
+            let path = file_selection.path().to_owned();
+            let initial_file_status = Box::new(DesktopFileDialogResult::new(Some(file_selection)));
 
-            //TODO: unwrap x2
-            let _ = fs::write(file_selection.path(),&http_res.bytes().await.unwrap()).unwrap();
+            let mut http_res = match isahc::get_async(url).await {
+                Ok(x) => x,
+                Err(_) => return Ok(None),
+            };
 
-            return Ok(Box::new(()))
+            let bytes = match http_res.bytes().await {
+                Ok(x) => x,
+                Err(_) => return Ok(None),
+            };
+
+            match fs::write(&path, &bytes) {
+                Ok(_) => {}
+                Err(_) => return Ok(None),
+            }
+
+            // Get file details after download for callbacks
+            let post_file_status =
+                Box::new(DesktopFileDialogResult::new(Some(FileHandle::wrap(path))));
+
+            return Ok(Some(DownloadDialogResult {
+                initial_dialog_result: initial_file_status,
+                dialog_result: post_file_status,
+                download_size: bytes.len(),
+            }));
         }))
     }
 

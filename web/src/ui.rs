@@ -3,6 +3,7 @@ use super::JavascriptPlayer;
 use std::borrow::Cow;
 use rfd::{AsyncFileDialog, FileHandle};
 use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::DownloadDialogResultFuture;
 use ruffle_web_common::JsResult;
 use std::path::Path;
 use web_sys::HtmlCanvasElement;
@@ -223,5 +224,9 @@ impl UiBackend for WebUiBackend {
 
     fn close_file_dialog(&mut self) {
         self.dialog_open = false;
+    }
+
+    fn display_file_download_dialog(&mut self, _url: String, _file_name: String, _domain: String) -> Option<DownloadDialogResultFuture> {
+        None
     }
 }
