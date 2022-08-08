@@ -33,12 +33,14 @@ pub trait FileDialogResult: Downcast {
     fn file_type(&self) -> Option<String>;
     fn creator(&self) -> Option<String>;
     fn contents(&self) -> &[u8];
+    fn write(&self, data: &[u8]);
+    fn refresh(&mut self);
 }
 impl_downcast!(FileDialogResult);
 
 
 /// Struct representing details about a completed download
-pub struct DownloadDialogResult {
+/*pub struct DownloadDialogResult {
     /// The details of the selected download destination, before its contents are modified by
     /// the download
     /// Needed as the onSelect/onOpen callbacks expect the details of the selected file prior to
@@ -48,11 +50,9 @@ pub struct DownloadDialogResult {
     pub dialog_result: Box<dyn FileDialogResult>,
     /// The amount of dat that was downloaded in bytes
     pub download_size: usize,
-}
+}*/
 
 pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
-pub type DownloadDialogResultFuture = OwnedFuture<Option<DownloadDialogResult>, LoaderError>;
-pub type UploadDialogResultFuture = OwnedFuture<Option<()>, LoaderError>;
 
 pub type FullscreenError = Cow<'static, str>;
 
@@ -81,17 +81,15 @@ pub trait UiBackend {
     // Unused, but kept in case we need it later.
     fn message(&self, message: &str);
 
-    /// Displays a file dialog, returning None if the dialog cannot be displayed
+    /// Displays a file selection dialog, returning None if the dialog cannot be displayed
     /// (e.g because it is already open)
-    fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
 
-    /// Display a dialog allowing a user to select a destination to download a file to
+    /// Display a dialog allowing a user to select a destination to save a file to
     ///
-    /// * `url` is the file name to download
     /// * `file_name` is a suggestion for the file name to save the file as
-    /// * `domain` is the domain of the url being accessed, this should be displayed in the
-    /// title of the dialog
-    fn display_file_download_dialog(&mut self, url: String, file_name: String, domain: String) -> Option<DownloadDialogResultFuture>;
+    /// * `title` is a title that should be displayed in the dialog
+    fn display_file_save_dialog(&mut self, file_name: String, title: String) -> Option<DialogResultFuture>;
 
     /// Mark that any previously open dialog has been closed
     fn close_file_dialog(&mut self);
@@ -216,7 +214,7 @@ impl UiBackend for NullUiBackend {
 
     fn message(&self, _message: &str) {}
 
-    fn display_file_dialog(&mut self, _filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(&mut self, _filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
         Some(Box::pin(async move {
             let result: Result<Box<dyn FileDialogResult>, LoaderError> =
                 Ok(Box::new(NullFileDialogResult::new()));
@@ -226,7 +224,7 @@ impl UiBackend for NullUiBackend {
 
     fn close_file_dialog(&mut self) {}
 
-    fn display_file_download_dialog(&mut self, _url: String, _file_name: String, _domain: String) -> Option<DownloadDialogResultFuture> {
+    fn display_file_save_dialog(&mut self, _file_name: String, _domain: String) -> Option<DialogResultFuture> {
         None
     }
 }
@@ -278,4 +276,7 @@ impl FileDialogResult for NullFileDialogResult {
     fn contents(&self) -> &[u8] {
         &[]
     }
+
+    fn write(&self, _data: &[u8]) {}
+    fn refresh(&mut self) {}
 }

@@ -2,10 +2,6 @@ use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
-use isahc::AsyncReadResponseExt;
-use ruffle_core::backend::ui::{
-     DownloadDialogResult, DownloadDialogResultFuture
-};
 use std::fs;
 use std::rc::Rc;
 use winit::window::Fullscreen;
@@ -25,10 +21,14 @@ impl DesktopFileDialogResult {
         let contents = if let Some(handle) = &handle {
             handle.read().await
         } else {
-            vec![]
+            Vec::new()
         };
 
-        Self { handle, md, contents }
+        Self {
+            handle,
+            md,
+            contents,
+        }
     }
 }
 
@@ -79,6 +79,28 @@ impl FileDialogResult for DesktopFileDialogResult {
 
     fn contents(&self) -> &[u8] {
         &self.contents
+    }
+
+    fn write(&self, data: &[u8]) {
+        if let Some(handle) = &self.handle {
+            let _ = fs::write(handle.path(), data);
+        }
+    }
+
+    fn refresh(&mut self) {
+        let md = self
+            .handle
+            .as_ref()
+            .and_then(|x| fs::metadata(x.path()).ok());
+
+        let contents = if let Some(handle) = &self.handle {
+            fs::read(handle.path()).unwrap_or(Vec::new())
+        } else {
+            Vec::new()
+        };
+
+        self.md = md;
+        self.contents = contents;
     }
 }
 
@@ -172,7 +194,7 @@ impl UiBackend for DesktopUiBackend {
         dialog.show();
     }
 
-    fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
@@ -205,12 +227,11 @@ impl UiBackend for DesktopUiBackend {
         }))
     }
 
-    fn display_file_download_dialog(
+    fn display_file_save_dialog(
         &mut self,
-        url: String,
         file_name: String,
-        domain: String,
-    ) -> Option<DownloadDialogResultFuture> {
+        title: String,
+    ) -> Option<DialogResultFuture> {
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
@@ -221,41 +242,13 @@ impl UiBackend for DesktopUiBackend {
         Some(Box::pin(async move {
             // Select the location to save the file to
             let dialog = AsyncFileDialog::new()
-                .set_title(&format!("Select location for download from {}", domain))
+                .set_title(&title)
                 .set_file_name(&file_name);
 
-            let file_selection = match dialog.save_file().await {
-                Some(x) => x,
-                None => return Ok(None),
-            };
-
-            let path = file_selection.path().to_owned();
-            let initial_file_status = Box::new(DesktopFileDialogResult::new(Some(file_selection)).await);
-
-            let mut http_res = match isahc::get_async(url).await {
-                Ok(x) => x,
-                Err(_) => return Ok(None),
-            };
-
-            let bytes = match http_res.bytes().await {
-                Ok(x) => x,
-                Err(_) => return Ok(None),
-            };
-
-            match fs::write(&path, &bytes) {
-                Ok(_) => {}
-                Err(_) => return Ok(None),
-            }
-
-            // Get file details after download for callbacks
-            let post_file_status =
-                Box::new(DesktopFileDialogResult::new(Some(FileHandle::wrap(path))).await);
-
-            return Ok(Some(DownloadDialogResult {
-                initial_dialog_result: initial_file_status,
-                dialog_result: post_file_status,
-                download_size: bytes.len(),
-            }));
+            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
+                DesktopFileDialogResult::new(dialog.save_file().await).await,
+            ));
+            result
         }))
     }
 

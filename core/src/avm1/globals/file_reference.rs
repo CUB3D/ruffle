@@ -207,7 +207,7 @@ pub fn browse<'gc>(
         _ => return Ok(Value::Undefined),
     };
 
-    let dialog = activation.context.ui.display_file_dialog(file_filters);
+    let dialog = activation.context.ui.display_file_open_dialog(file_filters);
 
     let result = match dialog {
         Some(dialog) => {
@@ -268,13 +268,14 @@ pub fn download<'gc>(
         let domain = url.domain().unwrap_or("<unknown domain>").to_string();
 
         // Create and spawn dialog
-        let dialog = activation.context.ui.display_file_download_dialog(url_string, file_name, domain);
+        let dialog = activation.context.ui.display_file_save_dialog(file_name, format!("Select location for download from {}", domain));
         let result = match dialog {
             Some(dialog) => {
                 let process = activation.context.load_manager.download_file_dialog(
                     activation.context.player.clone(),
                     this,
-                    dialog
+                    dialog,
+                    url_string
                 );
 
                 activation.context.navigator.spawn_future(process);

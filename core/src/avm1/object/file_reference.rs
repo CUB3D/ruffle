@@ -112,7 +112,7 @@ impl<'gc> FileReferenceObject<'gc> {
     pub fn init_from_dialog_result(
         &self,
         activation: &mut Activation<'_, 'gc, '_>,
-        dialog_result: Box<dyn FileDialogResult>,
+        dialog_result: &Box<dyn FileDialogResult>,
     ) {
         self.set_creation_date(
             activation.context.gc_context,

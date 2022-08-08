@@ -3,7 +3,6 @@ use super::JavascriptPlayer;
 use std::borrow::Cow;
 use rfd::{AsyncFileDialog, FileHandle};
 use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
-use ruffle_core::backend::ui::DownloadDialogResultFuture;
 use ruffle_web_common::JsResult;
 use std::path::Path;
 use web_sys::HtmlCanvasElement;
@@ -108,6 +107,10 @@ impl FileDialogResult for WebFileDialogResult {
     fn creator(&self) -> Option<String> {
         None
     }
+
+    fn contents(&self) -> &[u8] { todo!() }
+    fn write(&self, _: &[u8]) { todo!() }
+    fn refresh(&mut self) { todo!() }
 }
 
 /// An implementation of `UiBackend` utilizing `web_sys` bindings to input APIs.
@@ -190,7 +193,7 @@ impl UiBackend for WebUiBackend {
         self.js_player.display_message(message);
     }
 
-    fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
@@ -226,7 +229,7 @@ impl UiBackend for WebUiBackend {
         self.dialog_open = false;
     }
 
-    fn display_file_download_dialog(&mut self, _url: String, _file_name: String, _domain: String) -> Option<DownloadDialogResultFuture> {
+    fn display_file_save_dialog(&mut self, _file_name: String, _domain: String) -> Option<DialogResultFuture> {
         None
     }
 }
