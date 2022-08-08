@@ -24,7 +24,9 @@ pub struct FileFilter {
     pub mac_type: Option<String>,
 }
 
+/// A result of a file selection
 pub trait FileDialogResult: Downcast {
+    /// Was the file selection canceled by the user
     fn is_cancelled(&self) -> bool;
     fn creation_time(&self) -> Option<DateTime<Utc>>;
     fn modification_time(&self) -> Option<DateTime<Utc>>;
@@ -33,24 +35,17 @@ pub trait FileDialogResult: Downcast {
     fn file_type(&self) -> Option<String>;
     fn creator(&self) -> Option<String>;
     fn contents(&self) -> &[u8];
+    /// Write the given data to the chosen file
+    /// This will not necessarily by reflected in future calls to other functions (such as [FileDialogResult::size]),
+    /// until [FileDialogResult::refresh] is called
     fn write(&self, data: &[u8]);
+    /// Refresh any internal metadata, any future calls to other functions (such as [FileDialogResult::size]) will reflect
+    /// the state at the time of the last refresh
     fn refresh(&mut self);
 }
 impl_downcast!(FileDialogResult);
 
-/// Struct representing details about a completed download
-/*pub struct DownloadDialogResult {
-    /// The details of the selected download destination, before its contents are modified by
-    /// the download
-    /// Needed as the onSelect/onOpen callbacks expect the details of the selected file prior to
-    /// being overwritten with download data
-    pub initial_dialog_result: Box<dyn FileDialogResult>,
-    /// The details of the selection of the destination file
-    pub dialog_result: Box<dyn FileDialogResult>,
-    /// The amount of dat that was downloaded in bytes
-    pub download_size: usize,
-}*/
-
+/// Future representing a file selection in process
 pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
 
 pub type FullscreenError = Cow<'static, str>;
@@ -82,6 +77,7 @@ pub trait UiBackend {
 
     /// Displays a file selection dialog, returning None if the dialog cannot be displayed
     /// (e.g because it is already open)
+    /// * `filters` represents a list of filters to the possible file types that can be selected
     fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
 
     /// Display a dialog allowing a user to select a destination to save a file to

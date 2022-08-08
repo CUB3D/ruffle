@@ -1288,6 +1288,7 @@ impl<'gc> Loader<'gc> {
         }
     }
 
+    /// Loader to process callbacks for a file selection dialog
     pub fn file_dialog_loader(
         &mut self,
         player: Weak<Mutex<Player>>,
@@ -1358,6 +1359,9 @@ impl<'gc> Loader<'gc> {
         })
     }
 
+    /// Loader to handle a file download dialog
+    ///
+    /// Fetches the data from `url`, saves the data to the selected destination and processes callbacks
     pub fn file_download_dialog_loader(
         &mut self,
         player: Weak<Mutex<Player>>,
@@ -1479,6 +1483,10 @@ impl<'gc> Loader<'gc> {
         })
     }
 
+    /// Loader to handle a file upload task
+    ///
+    /// Uploads the given `data` to the provided `url`.
+    /// `file_name` is sent along with the data, as part of the multipart/form-data body
     pub fn file_upload_loader(
         &mut self,
         player: Weak<Mutex<Player>>,
