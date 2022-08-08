@@ -291,11 +291,31 @@ pub fn download<'gc>(
 
 pub fn upload<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
+    this: Object<'gc>,
+    args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    avm_warn!(activation, "FileReference.upload() not implemented");
-    Ok(Value::Undefined)
+    if let Some(url) = args.first() {
+        let url_string = url.coerce_to_string(activation)?.to_string();
+
+        // Invalid domain should bail out with false
+        match Url::parse(&url_string) {
+            Ok(_) => {},
+            Err(_) => return Ok(false.into())
+        };
+
+        let process = activation.context.load_manager.upload_file(
+            activation.context.player.clone(),
+            this,
+            url_string,
+            this.as_file_reference_object().unwrap().data()
+        );
+
+        activation.context.navigator.spawn_future(process);
+
+        return Ok(true.into());
+    }
+
+    Ok(false.into())
 }
 
 pub fn create_proto<'gc>(

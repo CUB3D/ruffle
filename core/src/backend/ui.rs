@@ -32,6 +32,7 @@ pub trait FileDialogResult: Downcast {
     fn size(&self) -> Option<u64>;
     fn file_type(&self) -> Option<String>;
     fn creator(&self) -> Option<String>;
+    fn contents(&self) -> &[u8];
 }
 impl_downcast!(FileDialogResult);
 
@@ -51,6 +52,7 @@ pub struct DownloadDialogResult {
 
 pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
 pub type DownloadDialogResultFuture = OwnedFuture<Option<DownloadDialogResult>, LoaderError>;
+pub type UploadDialogResultFuture = OwnedFuture<Option<()>, LoaderError>;
 
 pub type FullscreenError = Cow<'static, str>;
 
@@ -83,7 +85,7 @@ pub trait UiBackend {
     /// (e.g because it is already open)
     fn display_file_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
 
-    /// Display a dialog allowing a user to select a location to download a file to
+    /// Display a dialog allowing a user to select a destination to download a file to
     ///
     /// * `url` is the file name to download
     /// * `file_name` is a suggestion for the file name to save the file as
@@ -271,5 +273,9 @@ impl FileDialogResult for NullFileDialogResult {
     }
     fn creator(&self) -> Option<String> {
         None
+    }
+
+    fn contents(&self) -> &[u8] {
+        &[]
     }
 }

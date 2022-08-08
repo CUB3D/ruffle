@@ -14,13 +14,21 @@ use winit::window::Window;
 pub struct DesktopFileDialogResult {
     handle: Option<FileHandle>,
     md: Option<fs::Metadata>,
+    contents: Vec<u8>,
 }
 
 impl DesktopFileDialogResult {
     /// Create a new [`DesktopFileDialogResult`] from a given file handle
-    pub fn new(handle: Option<FileHandle>) -> Self {
+    pub async fn new(handle: Option<FileHandle>) -> Self {
         let md = handle.as_ref().and_then(|x| fs::metadata(x.path()).ok());
-        Self { handle, md }
+
+        let contents = if let Some(handle) = &handle {
+            handle.read().await
+        } else {
+            vec![]
+        };
+
+        Self { handle, md, contents }
     }
 }
 
@@ -67,6 +75,10 @@ impl FileDialogResult for DesktopFileDialogResult {
 
     fn creator(&self) -> Option<String> {
         None
+    }
+
+    fn contents(&self) -> &[u8] {
+        &self.contents
     }
 }
 
@@ -187,7 +199,7 @@ impl UiBackend for DesktopUiBackend {
             }
 
             let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
-                DesktopFileDialogResult::new(dialog.pick_file().await),
+                DesktopFileDialogResult::new(dialog.pick_file().await).await,
             ));
             result
         }))
@@ -218,7 +230,7 @@ impl UiBackend for DesktopUiBackend {
             };
 
             let path = file_selection.path().to_owned();
-            let initial_file_status = Box::new(DesktopFileDialogResult::new(Some(file_selection)));
+            let initial_file_status = Box::new(DesktopFileDialogResult::new(Some(file_selection)).await);
 
             let mut http_res = match isahc::get_async(url).await {
                 Ok(x) => x,
@@ -237,7 +249,7 @@ impl UiBackend for DesktopUiBackend {
 
             // Get file details after download for callbacks
             let post_file_status =
-                Box::new(DesktopFileDialogResult::new(Some(FileHandle::wrap(path))));
+                Box::new(DesktopFileDialogResult::new(Some(FileHandle::wrap(path))).await);
 
             return Ok(Some(DownloadDialogResult {
                 initial_dialog_result: initial_file_status,

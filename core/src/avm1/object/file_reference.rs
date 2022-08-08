@@ -25,6 +25,9 @@ pub struct FileReferenceData<'gc> {
     post_data: String,
     size: Option<u64>,
     file_type: Option<String>,
+    /// The contents of the referenced file
+    /// We track this here so that it can be referenced in FileReference.upload
+    data: Vec<u8>,
 }
 
 impl fmt::Debug for FileReferenceObject<'_> {
@@ -48,6 +51,14 @@ impl<'gc> FileReferenceObject<'gc> {
         [modification_date, Option<DateObject<'gc>>, set => set_modification_date, get => modification_date],
         [size, Option<u64>, set => set_size, get => size],
     );
+
+    pub fn data(self) -> Vec<u8> {
+        self.0.read().data.clone()
+    }
+
+    pub fn set_data(self, gc_context: MutationContext<'gc, '_>, v: &[u8]) {
+        self.0.write(gc_context).data = v.to_vec();
+    }
 
     pub fn name(self) -> Option<String> {
         self.0.read().name.clone()
@@ -93,6 +104,7 @@ impl<'gc> FileReferenceObject<'gc> {
                 post_data: "".to_string(),
                 size: None,
                 file_type: None,
+                data: Vec::new(),
             },
         ))
     }
@@ -127,6 +139,8 @@ impl<'gc> FileReferenceObject<'gc> {
         self.set_size(activation.context.gc_context, dialog_result.size());
 
         self.set_creator(activation.context.gc_context, dialog_result.creator());
+
+        self.set_data(activation.context.gc_context, dialog_result.contents());
     }
 }
 

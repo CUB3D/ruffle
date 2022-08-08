@@ -128,6 +128,9 @@ pub enum Error {
     #[error("Non-file download dialog loader spawned as file download dialog loader")]
     NotFileDownloadDialogLoader,
 
+    #[error("Non-file upload loader spawned as file upload loader")]
+    NotFileUploadLoader,
+
     #[error("Could not fetch movie {0}")]
     FetchError(String),
 
@@ -188,7 +191,8 @@ impl<'gc> LoadManager<'gc> {
             | Loader::LoadVars { self_handle, .. }
             | Loader::LoadURLLoader { self_handle, .. }
             | Loader::FileDialog { self_handle, .. }
-            | Loader::DownloadFileDialog { self_handle, .. } => *self_handle = Some(handle),
+            | Loader::DownloadFileDialog { self_handle, .. }
+            | Loader::UploadFile { self_handle, ..} => *self_handle = Some(handle),
         }
         handle
     }
@@ -354,6 +358,27 @@ impl<'gc> LoadManager<'gc> {
         let loader = self.get_loader_mut(handle).unwrap();
         loader.file_download_dialog_loader(player, dialog)
     }
+
+
+    /// Upload a file
+    ///
+    /// Returns a future that will be resolved when the file upload has completed
+    #[must_use]
+    pub fn upload_file(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        target_object: Object<'gc>,
+        url: String,
+        data: Vec<u8>,
+    ) -> OwnedFuture<(), Error> {
+        let loader = Loader::UploadFile {
+            self_handle: None,
+            target_object,
+        };
+        let handle = self.add_loader(loader);
+        let loader = self.get_loader_mut(handle).unwrap();
+        loader.file_upload_loader(player, url, data)
+    }
 }
 
 impl<'gc> Default for LoadManager<'gc> {
@@ -459,6 +484,16 @@ pub enum Loader<'gc> {
 
     /// Loader that is downloading a file from an AVM1 object scope.
     DownloadFileDialog {
+        /// The handle to refer to this loader instance.
+        #[collect(require_static)]
+        self_handle: Option<Handle>,
+
+        /// The target AVM1 object to select a file path from.
+        target_object: Object<'gc>,
+    },
+
+    /// Loader that is uploading a file from an AVM1 object scope.
+    UploadFile {
         /// The handle to refer to this loader instance.
         #[collect(require_static)]
         self_handle: Option<Handle>,
@@ -1414,7 +1449,70 @@ impl<'gc> Loader<'gc> {
                         }
                     }
                     Err(err) => {
-                        log::warn!("Error on file dialog: {}", err);
+                        log::warn!("Error on file dialog: {:?}", err);
+                    }
+                }
+
+                Ok(())
+            })
+        })
+    }
+
+   pub fn file_upload_loader(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        url: String,
+        data: Vec<u8>
+    ) -> OwnedFuture<(), Error> {
+        let handle = match self {
+            Loader::UploadFile { self_handle, .. } => {
+                self_handle.expect("Loader not self-introduced")
+            }
+            _ => return Box::pin(async { Err(Error::NotFileUploadLoader) }),
+        };
+
+        let player = player
+            .upgrade()
+            .expect("Could not upgrade weak reference to player");
+
+        Box::pin(async move {
+
+            // Upload the data
+            //TODO: this needs to be a form-data encoded body with a content disposition header containing the file name
+            let req = Request::post(url, Some((data, "multipart/form-data".to_string())));
+            let result = player.lock().unwrap().navigator().fetch(req).await;
+
+            // Fire the load handler.
+            player.lock().unwrap().update(|uc| -> Result<(), Error> {
+                let loader = uc.load_manager.get_loader(handle);
+
+                // Get the file reference
+                let target_object = match loader {
+                    Some(&Loader::UploadFile { target_object, .. }) => target_object,
+                    None => return Err(Error::Cancelled),
+                    _ => return Err(Error::NotFileUploadLoader),
+                };
+
+                let file_ref = target_object.as_file_reference_object().unwrap();
+
+                let mut activation = Activation::from_stub(
+                    uc.reborrow(),
+                    ActivationIdentifier::root("[File Dialog]"),
+                );
+
+                match result {
+                    Ok(_) => {
+                        //TODO: correct ones
+                        as_broadcaster::broadcast_internal(
+                            &mut activation,
+                            target_object,
+                            &[target_object.into()],
+                            "onComplete".into(),
+                        )?;
+                    }
+                    Err(err) => {
+                        //TODO: io error go here
+                        log::warn!("Error on file dialog: {:?}", err);
                     }
                 }
 
