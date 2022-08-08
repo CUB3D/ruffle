@@ -18,6 +18,8 @@ pub struct FileReferenceData<'gc> {
     /// The underlying script object.
     base: ScriptObject<'gc>,
 
+    /// Has this object been initialised from a dialog
+    is_initialised: bool,
     creation_date: Option<DateObject<'gc>>,
     creator: Option<String>,
     modification_date: Option<DateObject<'gc>>,
@@ -50,6 +52,7 @@ impl<'gc> FileReferenceObject<'gc> {
         [creation_date, Option<DateObject<'gc>>, set => set_creation_date, get => creation_date],
         [modification_date, Option<DateObject<'gc>>, set => set_modification_date, get => modification_date],
         [size, Option<u64>, set => set_size, get => size],
+        [is_initialised, bool, set => set_is_initialised, get => initialised],
     );
 
     pub fn data(self) -> Vec<u8> {
@@ -97,6 +100,7 @@ impl<'gc> FileReferenceObject<'gc> {
             gc_context,
             FileReferenceData {
                 base: ScriptObject::new(gc_context, proto),
+                is_initialised: false,
                 creation_date: None,
                 creator: None,
                 modification_date: None,
@@ -114,6 +118,8 @@ impl<'gc> FileReferenceObject<'gc> {
         activation: &mut Activation<'_, 'gc, '_>,
         dialog_result: &dyn FileDialogResult,
     ) {
+        self.set_is_initialised(activation.context.gc_context, true);
+
         self.set_creation_date(
             activation.context.gc_context,
             Some(DateObject::with_date_time(

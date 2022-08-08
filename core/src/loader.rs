@@ -1410,71 +1410,95 @@ impl<'gc> Loader<'gc> {
 
                 match dialog_result {
                     Ok(mut dialog_result) => {
-                        // onSelect and onOpen should be called before the download begins
-                        // We simulate this by using the initial dialog result
-                        file_ref.init_from_dialog_result(&mut activation, dialog_result.borrow());
+                        if !dialog_result.is_cancelled() {
+                            // onSelect and onOpen should be called before the download begins
+                            // We simulate this by using the initial dialog result
+                            file_ref
+                                .init_from_dialog_result(&mut activation, dialog_result.borrow());
 
-                        as_broadcaster::broadcast_internal(
-                            &mut activation,
-                            target_object,
-                            &[target_object.into()],
-                            "onSelect".into(),
-                        )?;
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onSelect".into(),
+                            )?;
 
-                        as_broadcaster::broadcast_internal(
-                            &mut activation,
-                            target_object,
-                            &[target_object.into()],
-                            "onOpen".into(),
-                        )?;
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onOpen".into(),
+                            )?;
 
-                        match download_res {
-                            Ok(download_res) => {
-                                // onProgress and onComplete expect to receive the current state
-                                // of the file, as we simulate an instant 100% download from the
-                                // perspective of AS, we want to refresh the file_ref internal data
-                                // before invoking the callbacks
+                            match download_res {
+                                Ok(download_res) => {
+                                    // onProgress and onComplete expect to receive the current state
+                                    // of the file, as we simulate an instant 100% download from the
+                                    // perspective of AS, we want to refresh the file_ref internal data
+                                    // before invoking the callbacks
 
-                                dialog_result.write(&download_res.body);
-                                dialog_result.refresh();
-                                file_ref.init_from_dialog_result(
-                                    &mut activation,
-                                    dialog_result.borrow(),
-                                );
+                                    dialog_result.write(&download_res.body);
+                                    dialog_result.refresh();
+                                    file_ref.init_from_dialog_result(
+                                        &mut activation,
+                                        dialog_result.borrow(),
+                                    );
 
-                                let total_bytes = download_res.body.len();
+                                    let total_bytes = download_res.body.len();
 
-                                as_broadcaster::broadcast_internal(
-                                    &mut activation,
-                                    target_object,
-                                    &[target_object.into(), total_bytes.into(), total_bytes.into()],
-                                    "onProgress".into(),
-                                )?;
+                                    as_broadcaster::broadcast_internal(
+                                        &mut activation,
+                                        target_object,
+                                        &[
+                                            target_object.into(),
+                                            total_bytes.into(),
+                                            total_bytes.into(),
+                                        ],
+                                        "onProgress".into(),
+                                    )?;
 
-                                as_broadcaster::broadcast_internal(
-                                    &mut activation,
-                                    target_object,
-                                    &[target_object.into()],
-                                    "onComplete".into(),
-                                )?;
+                                    as_broadcaster::broadcast_internal(
+                                        &mut activation,
+                                        target_object,
+                                        &[target_object.into()],
+                                        "onComplete".into(),
+                                    )?;
+                                }
+                                Err(_err) => {
+                                    as_broadcaster::broadcast_internal(
+                                        &mut activation,
+                                        target_object,
+                                        &[target_object.into()],
+                                        "onIOError".into(),
+                                    )?;
+
+                                    // Flash still executes the onProgress callback, even after an error
+                                    //TODO: This should be the size of the HTTP body in bytes, but we don't have access to it here
+                                    let total_bytes = 100;
+
+                                    as_broadcaster::broadcast_internal(
+                                        &mut activation,
+                                        target_object,
+                                        &[
+                                            target_object.into(),
+                                            total_bytes.into(),
+                                            total_bytes.into(),
+                                        ],
+                                        "onProgress".into(),
+                                    )?;
+                                }
                             }
-                            Err(_) => {
-                                as_broadcaster::broadcast_internal(
-                                    &mut activation,
-                                    target_object,
-                                    &[target_object.into()],
-                                    "onIOError".into(),
-                                )?;
-                            }
+                        } else {
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onCancel".into(),
+                            )?;
                         }
                     }
-                    Err(_) => {
-                        as_broadcaster::broadcast_internal(
-                            &mut activation,
-                            target_object,
-                            &[target_object.into()],
-                            "onCancel".into(),
-                        )?;
+                    Err(err) => {
+                        log::warn!("Download dialog had an error {:?}", err);
                     }
                 }
 

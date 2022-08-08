@@ -294,24 +294,32 @@ pub fn upload<'gc>(
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(file_reference) = this.as_file_reference_object() {
+        // If we haven't `.browse()`ed something yet, we can't upload it
+        if !file_reference.initialised() {
+            return Ok(false.into());
+        }
+
         if let Some(url) = args.first() {
             let url_string = url.coerce_to_string(activation)?.to_string();
 
             // Invalid domain should bail out with false
-            match Url::parse(&url_string) {
-                Ok(_) => {}
+            let url = match Url::parse(&url_string) {
+                Ok(url) => url,
                 Err(_) => return Ok(false.into()),
             };
+
+            // We should only allow uploads to http(s) urls
+            match url.scheme() {
+                "https" | "http" => {}
+                _ => return Ok(false.into()),
+            }
 
             let process = activation.context.load_manager.upload_file(
                 activation.context.player.clone(),
                 this,
                 url_string,
                 file_reference.data(),
-                //TODO: what is the default here
-                file_reference
-                    .name()
-                    .unwrap_or_else(|| "Unknown_file_name".to_string()),
+                file_reference.name().unwrap_or_else(|| "file".to_string()),
             );
 
             activation.context.navigator.spawn_future(process);
