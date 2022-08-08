@@ -1,9 +1,12 @@
 use super::JavascriptPlayer;
 
-use std::borrow::Cow;
 use rfd::{AsyncFileDialog, FileHandle};
-use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::{
+    DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor,
+    UiBackend,
+};
 use ruffle_web_common::JsResult;
+use std::borrow::Cow;
 use std::path::Path;
 use web_sys::HtmlCanvasElement;
 
@@ -31,11 +34,18 @@ impl std::error::Error for FullScreenError {
 
 pub struct WebFileDialogResult {
     handle: Option<FileHandle>,
+    contents: Vec<u8>,
 }
 
 impl WebFileDialogResult {
-    pub fn new(handle: Option<FileHandle>) -> Self {
-        Self { handle }
+    pub async fn new(handle: Option<FileHandle>) -> Self {
+        let contents = if let Some(handle) = handle.as_ref() {
+            handle.read().await
+        } else {
+            Vec::new()
+        };
+
+        Self { handle, contents }
     }
 }
 
@@ -108,9 +118,17 @@ impl FileDialogResult for WebFileDialogResult {
         None
     }
 
-    fn contents(&self) -> &[u8] { todo!() }
-    fn write(&self, _: &[u8]) { todo!() }
-    fn refresh(&mut self) { todo!() }
+    fn contents(&self) -> &[u8] {
+        &self.contents
+    }
+
+    fn write(&self, _data: &[u8]) {
+        //NOOP
+    }
+
+    fn refresh(&mut self) {
+        todo!()
+    }
 }
 
 /// An implementation of `UiBackend` utilizing `web_sys` bindings to input APIs.
@@ -219,8 +237,9 @@ impl UiBackend for WebUiBackend {
                 }
             }
 
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> =
-                Ok(Box::new(WebFileDialogResult::new(dialog.pick_file().await)));
+            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
+                WebFileDialogResult::new(dialog.pick_file().await).await,
+            ));
             result
         }))
     }
@@ -229,7 +248,11 @@ impl UiBackend for WebUiBackend {
         self.dialog_open = false;
     }
 
-    fn display_file_save_dialog(&mut self, _file_name: String, _domain: String) -> Option<DialogResultFuture> {
+    fn display_file_save_dialog(
+        &mut self,
+        _file_name: String,
+        _domain: String,
+    ) -> Option<DialogResultFuture> {
         None
     }
 }

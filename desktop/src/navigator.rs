@@ -159,8 +159,9 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                     NavigationMethod::Post => IsahcRequest::post(processed_url.to_string()),
                 };
 
-                let (body_data, _) = request.body().clone().unwrap_or_default();
+                let (body_data, content_type) = request.body().clone().unwrap_or_default();
                 let body = isahc_request
+                    .header("Content-Type", content_type)
                     .body(body_data)
                     .map_err(|e| Error::FetchError(e.to_string()))?;
 

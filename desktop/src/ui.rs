@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
-use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::{
+    DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor,
+    UiBackend,
+};
 use std::fs;
 use std::rc::Rc;
 use winit::window::Fullscreen;
@@ -94,7 +97,7 @@ impl FileDialogResult for DesktopFileDialogResult {
             .and_then(|x| fs::metadata(x.path()).ok());
 
         let contents = if let Some(handle) = &self.handle {
-            fs::read(handle.path()).unwrap_or(Vec::new())
+            fs::read(handle.path()).unwrap_or_default()
         } else {
             Vec::new()
         };

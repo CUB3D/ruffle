@@ -16,13 +16,13 @@ use crate::avm2::{
     Value as Avm2Value,
 };
 use crate::backend::navigator::{OwnedFuture, Request};
+use crate::backend::ui::DialogResultFuture;
 use crate::context::{ActionQueue, ActionType, UpdateContext};
 use crate::display_object::{
     Bitmap, DisplayObject, TDisplayObject, TDisplayObjectContainer, TInteractiveObject,
 };
 use crate::events::ClipEvent;
 use crate::frame_lifecycle::catchup_display_object_to_frame;
-use crate::backend::ui::DialogResultFuture;
 use crate::player::Player;
 use crate::string::AvmString;
 use crate::tag_utils::SwfMovie;
@@ -31,6 +31,7 @@ use encoding_rs::UTF_8;
 use gc_arena::{Collect, CollectionContext};
 use generational_arena::{Arena, Index};
 use ruffle_render::utils::{determine_jpeg_tag_format, JpegTagFormat};
+use std::borrow::Borrow;
 use std::fmt;
 use std::sync::{Arc, Mutex, Weak};
 use swf::read::read_compression_type;
@@ -191,7 +192,7 @@ impl<'gc> LoadManager<'gc> {
             | Loader::LoadURLLoader { self_handle, .. }
             | Loader::FileDialog { self_handle, .. }
             | Loader::DownloadFileDialog { self_handle, .. }
-            | Loader::UploadFile { self_handle, ..} => *self_handle = Some(handle),
+            | Loader::UploadFile { self_handle, .. } => *self_handle = Some(handle),
         }
         handle
     }
@@ -359,7 +360,6 @@ impl<'gc> LoadManager<'gc> {
         loader.file_download_dialog_loader(player, dialog, url)
     }
 
-
     /// Upload a file
     ///
     /// Returns a future that will be resolved when the file upload has completed
@@ -370,6 +370,7 @@ impl<'gc> LoadManager<'gc> {
         target_object: Object<'gc>,
         url: String,
         data: Vec<u8>,
+        file_name: String,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::UploadFile {
             self_handle: None,
@@ -377,7 +378,7 @@ impl<'gc> LoadManager<'gc> {
         };
         let handle = self.add_loader(loader);
         let loader = self.get_loader_mut(handle).unwrap();
-        loader.file_upload_loader(player, url, data)
+        loader.file_upload_loader(player, url, data, file_name)
     }
 }
 
@@ -1330,7 +1331,8 @@ impl<'gc> Loader<'gc> {
                         use crate::avm1::globals::as_broadcaster;
 
                         if !dialog_result.is_cancelled() {
-                            file_ref.init_from_dialog_result(&mut activation, &dialog_result);
+                            file_ref
+                                .init_from_dialog_result(&mut activation, dialog_result.borrow());
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
@@ -1406,7 +1408,7 @@ impl<'gc> Loader<'gc> {
                     Ok(mut dialog_result) => {
                         // onSelect and onOpen should be called before the download begins
                         // We simulate this by using the initial dialog result
-                        file_ref.init_from_dialog_result(&mut activation, &dialog_result);
+                        file_ref.init_from_dialog_result(&mut activation, dialog_result.borrow());
 
                         as_broadcaster::broadcast_internal(
                             &mut activation,
@@ -1422,7 +1424,6 @@ impl<'gc> Loader<'gc> {
                             "onOpen".into(),
                         )?;
 
-
                         match download_res {
                             Ok(download_res) => {
                                 // onProgress and onComplete expect to receive the current state
@@ -1432,7 +1433,10 @@ impl<'gc> Loader<'gc> {
 
                                 dialog_result.write(&download_res.body);
                                 dialog_result.refresh();
-                                file_ref.init_from_dialog_result(&mut activation, &dialog_result);
+                                file_ref.init_from_dialog_result(
+                                    &mut activation,
+                                    dialog_result.borrow(),
+                                );
 
                                 let total_bytes = download_res.body.len();
 
@@ -1449,8 +1453,7 @@ impl<'gc> Loader<'gc> {
                                     &[target_object.into()],
                                     "onComplete".into(),
                                 )?;
-
-                            },
+                            }
                             Err(_) => {
                                 as_broadcaster::broadcast_internal(
                                     &mut activation,
@@ -1458,7 +1461,7 @@ impl<'gc> Loader<'gc> {
                                     &[target_object.into()],
                                     "onIOError".into(),
                                 )?;
-                            },
+                            }
                         }
                     }
                     Err(_) => {
@@ -1476,13 +1479,13 @@ impl<'gc> Loader<'gc> {
         })
     }
 
-   pub fn file_upload_loader(
+    pub fn file_upload_loader(
         &mut self,
         player: Weak<Mutex<Player>>,
         url: String,
-        data: Vec<u8>
+        data: Vec<u8>,
+        file_name: String,
     ) -> OwnedFuture<(), Error> {
-
         let handle = match self {
             Loader::UploadFile { self_handle, .. } => {
                 self_handle.expect("Loader not self-introduced")
@@ -1495,12 +1498,34 @@ impl<'gc> Loader<'gc> {
             .expect("Could not upgrade weak reference to player");
 
         Box::pin(async move {
-
             let total_size_bytes = data.len();
 
+            // Format the data into multipart/form-data
+            let mut out_data = Vec::new();
+            out_data.extend_from_slice(b"------------BOUNDARY\n");
+            out_data.extend_from_slice(b"Content-Disposition: form-data; name=\"Filename\"\n\n");
+            out_data.extend_from_slice(file_name.as_bytes());
+            out_data.extend_from_slice(b"\n------------BOUNDARY\n");
+            out_data.extend_from_slice(
+                b"Content-Disposition: form-data; name=\"Filedata\"; filename=\"",
+            );
+            out_data.extend_from_slice(file_name.as_bytes());
+            out_data.extend_from_slice(b"\"\n");
+            out_data.extend_from_slice(b"Content-Type: application/octet-stream\n\n");
+            out_data.extend_from_slice(&data);
+            out_data.extend_from_slice(b"\n------------BOUNDARY\n");
+            out_data.extend_from_slice(b"Content-Disposition: form-data; name=\"Upload\"\n\n");
+            out_data.extend_from_slice(b"Submit Query");
+            out_data.extend_from_slice(b"\n------------BOUNDARY\n");
+
             // Upload the data
-            //TODO: this needs to be a form-data encoded body with a content disposition header containing the file name
-            let req = Request::post(url, Some((data, "multipart/form-data".to_string())));
+            let req = Request::post(
+                url,
+                Some((
+                    out_data,
+                    "multipart/form-data; boundary=------------BOUNDARY".to_string(),
+                )),
+            );
             // Doing this in two steps to prevent holding the player lock during fetch
             let future = player.lock().unwrap().navigator().fetch(req);
             let result = future.await;
@@ -1515,7 +1540,7 @@ impl<'gc> Loader<'gc> {
                     None => return Err(Error::Cancelled),
                     _ => return Err(Error::NotFileUploadLoader),
                 };
-                
+
                 let mut activation = Activation::from_stub(
                     uc.reborrow(),
                     ActivationIdentifier::root("[File Dialog]"),
@@ -1542,7 +1567,11 @@ impl<'gc> Loader<'gc> {
                         as_broadcaster::broadcast_internal(
                             &mut activation,
                             target_object,
-                            &[target_object.into(), total_size_bytes.into(), total_size_bytes.into()],
+                            &[
+                                target_object.into(),
+                                total_size_bytes.into(),
+                                total_size_bytes.into(),
+                            ],
                             "onProgress".into(),
                         )?;
 

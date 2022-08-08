@@ -240,27 +240,22 @@ pub fn download<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-
     if let Some(url) = args.first() {
         let url_string = url.coerce_to_string(activation)?.to_string();
 
         // Invalid domain should bail out with false
         let url = match Url::parse(&url_string) {
             Ok(url) => url,
-            Err(_) => return Ok(false.into())
+            Err(_) => return Ok(false.into()),
         };
 
         let file_name = match args.get(1) {
-            Some(file_name) => {
-                file_name.coerce_to_string(activation)?.to_string()
-            }
+            Some(file_name) => file_name.coerce_to_string(activation)?.to_string(),
             None => {
                 // Try to get the end of the path as a file name, if we can't bail and return false
-                match url.path().split("/").last() {
+                match url.path().split('/').last() {
                     Some(path_end) => path_end.to_string(),
-                    None => {
-                        return Ok(false.into())
-                    }
+                    None => return Ok(false.into()),
                 }
             }
         };
@@ -268,14 +263,17 @@ pub fn download<'gc>(
         let domain = url.domain().unwrap_or("<unknown domain>").to_string();
 
         // Create and spawn dialog
-        let dialog = activation.context.ui.display_file_save_dialog(file_name, format!("Select location for download from {}", domain));
+        let dialog = activation.context.ui.display_file_save_dialog(
+            file_name,
+            format!("Select location for download from {}", domain),
+        );
         let result = match dialog {
             Some(dialog) => {
                 let process = activation.context.load_manager.download_file_dialog(
                     activation.context.player.clone(),
                     this,
                     dialog,
-                    url_string
+                    url_string,
                 );
 
                 activation.context.navigator.spawn_future(process);
@@ -295,28 +293,36 @@ pub fn upload<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Some(url) = args.first() {
-        let url_string = url.coerce_to_string(activation)?.to_string();
+    if let Some(file_reference) = this.as_file_reference_object() {
+        if let Some(url) = args.first() {
+            let url_string = url.coerce_to_string(activation)?.to_string();
 
-        // Invalid domain should bail out with false
-        match Url::parse(&url_string) {
-            Ok(_) => {},
-            Err(_) => return Ok(false.into())
-        };
+            // Invalid domain should bail out with false
+            match Url::parse(&url_string) {
+                Ok(_) => {}
+                Err(_) => return Ok(false.into()),
+            };
 
-        let process = activation.context.load_manager.upload_file(
-            activation.context.player.clone(),
-            this,
-            url_string,
-            this.as_file_reference_object().unwrap().data()
-        );
+            let process = activation.context.load_manager.upload_file(
+                activation.context.player.clone(),
+                this,
+                url_string,
+                file_reference.data(),
+                //TODO: what is the default here
+                file_reference
+                    .name()
+                    .unwrap_or_else(|| "Unknown_file_name".to_string()),
+            );
 
-        activation.context.navigator.spawn_future(process);
+            activation.context.navigator.spawn_future(process);
 
-        return Ok(true.into());
+            return Ok(true.into());
+        }
+
+        return Ok(false.into());
     }
 
-    Ok(false.into())
+    Ok(Value::Undefined)
 }
 
 pub fn create_proto<'gc>(

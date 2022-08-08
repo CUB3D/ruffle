@@ -1,9 +1,9 @@
 use crate::events::{KeyCode, PlayerEvent};
-use std::borrow::Cow;
-use std::collections::HashSet;
 pub use crate::loader::Error as LoaderError;
 use chrono::{DateTime, Utc};
 use downcast_rs::Downcast;
+use std::borrow::Cow;
+use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -37,7 +37,6 @@ pub trait FileDialogResult: Downcast {
     fn refresh(&mut self);
 }
 impl_downcast!(FileDialogResult);
-
 
 /// Struct representing details about a completed download
 /*pub struct DownloadDialogResult {
@@ -89,7 +88,11 @@ pub trait UiBackend {
     ///
     /// * `file_name` is a suggestion for the file name to save the file as
     /// * `title` is a title that should be displayed in the dialog
-    fn display_file_save_dialog(&mut self, file_name: String, title: String) -> Option<DialogResultFuture>;
+    fn display_file_save_dialog(
+        &mut self,
+        file_name: String,
+        title: String,
+    ) -> Option<DialogResultFuture>;
 
     /// Mark that any previously open dialog has been closed
     fn close_file_dialog(&mut self);
@@ -214,7 +217,10 @@ impl UiBackend for NullUiBackend {
 
     fn message(&self, _message: &str) {}
 
-    fn display_file_open_dialog(&mut self, _filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(
+        &mut self,
+        _filters: Vec<FileFilter>,
+    ) -> Option<DialogResultFuture> {
         Some(Box::pin(async move {
             let result: Result<Box<dyn FileDialogResult>, LoaderError> =
                 Ok(Box::new(NullFileDialogResult::new()));
@@ -224,7 +230,11 @@ impl UiBackend for NullUiBackend {
 
     fn close_file_dialog(&mut self) {}
 
-    fn display_file_save_dialog(&mut self, _file_name: String, _domain: String) -> Option<DialogResultFuture> {
+    fn display_file_save_dialog(
+        &mut self,
+        _file_name: String,
+        _domain: String,
+    ) -> Option<DialogResultFuture> {
         None
     }
 }
