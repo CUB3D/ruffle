@@ -7,7 +7,22 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use swf::avm1::types::SendVarsMethod;
-use url::Url;
+use url::{ParseError, Url};
+use thiserror::Error;
+
+/// Attempt to convert a relative URL into an absolute URL, using the base URL
+/// if necessary.
+///
+/// If the relative URL is actually absolute, then the base will not be used.
+pub fn url_from_relative_url(base: &str, relative: &str) -> Result<Url, ParseError> {
+    let parsed = Url::parse(relative);
+    if let Err(ParseError::RelativeUrlWithoutBase) = parsed {
+        let base = Url::parse(base)?;
+        return base.join(relative);
+    }
+
+    parsed
+}
 
 /// Enumerates all possible navigation methods.
 #[derive(Copy, Clone)]
@@ -103,6 +118,22 @@ pub struct Response {
 
     /// The contents of the response body.
     pub body: Vec<u8>,
+}
+
+/// An error response from a fetch request
+#[derive(Debug, Error)]
+pub enum FetchError {
+    /// The domain could not be resolved, either because it is invalid or a DNS error occurred
+    #[error("Failed to resolve host name")]
+    InvalidDomain,
+
+    /// The destination returned a status code that indicated a failure
+    #[error("Destination returned an unsuccessful status code")]
+    UnsuccessfulStatusCode,
+
+    /// Some other error occurred
+    #[error("Other fetch error {0}")]
+    Other(String),
 }
 
 /// Type alias for pinned, boxed, and owned futures that output a falliable
@@ -288,10 +319,10 @@ impl NavigatorBackend for NullNavigatorBackend {
 
         Box::pin(async move {
             let url = Self::url_from_file_path(&path)
-                .map_err(|()| Error::FetchError("Invalid URL".to_string()))?
+                .map_err(|()| Error::FetchError(FetchError::Other("Invalid URL".to_string())))?
                 .into();
 
-            let body = std::fs::read(path).map_err(|e| Error::FetchError(e.to_string()))?;
+            let body = std::fs::read(path).map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
 
             Ok(Response { url, body })
         })

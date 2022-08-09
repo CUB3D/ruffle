@@ -17,6 +17,7 @@ use crate::avm2::{
 };
 use crate::backend::navigator::{OwnedFuture, Request};
 use crate::backend::ui::DialogResultFuture;
+use crate::backend::navigator::FetchError;
 use crate::context::{ActionQueue, ActionType, UpdateContext};
 use crate::display_object::{
     Bitmap, DisplayObject, TDisplayObject, TDisplayObjectContainer, TInteractiveObject,
@@ -131,8 +132,8 @@ pub enum Error {
     #[error("Non-file upload loader spawned as file upload loader")]
     NotFileUploadLoader,
 
-    #[error("Could not fetch movie {0}")]
-    FetchError(String),
+    #[error("Could not fetch movie {0:?}")]
+    FetchError(crate::backend::navigator::FetchError),
 
     #[error("Invalid SWF: {0}")]
     InvalidSwf(#[from] crate::tag_utils::Error),
@@ -1586,23 +1587,15 @@ impl<'gc> Loader<'gc> {
                 );
 
                 use crate::avm1::globals::as_broadcaster;
+                as_broadcaster::broadcast_internal(
+                    &mut activation,
+                    target_object,
+                    &[target_object.into()],
+                    "onOpen".into(),
+                )?;
 
                 match result {
                     Ok(_) => {
-                        as_broadcaster::broadcast_internal(
-                            &mut activation,
-                            target_object,
-                            &[target_object.into()],
-                            "onOpen".into(),
-                        )?;
-
-                        as_broadcaster::broadcast_internal(
-                            &mut activation,
-                            target_object,
-                            &[target_object.into(), 0.into(), total_size_bytes.into()],
-                            "onProgress".into(),
-                        )?;
-
                         as_broadcaster::broadcast_internal(
                             &mut activation,
                             target_object,
@@ -1621,13 +1614,62 @@ impl<'gc> Loader<'gc> {
                             "onComplete".into(),
                         )?;
                     }
-                    Err(_) => {
-                        as_broadcaster::broadcast_internal(
-                            &mut activation,
-                            target_object,
-                            &[target_object.into()],
-                            "onHTTPError".into(),
-                        )?;
+                    Err(err) => {
+                        // If the error was due to the domain not existing, then this should call
+                        // onIoError only
+                        // If the error was instead due to the server returning a non successful response code,
+                        // this should call onProgress with the size of the error response body,
+                        // then should call onHTTPError
+
+                        println!("e = {:?}", err);
+
+                        match err {
+                            Error::FetchError(err) => {
+                                match err {
+                                    FetchError::InvalidDomain => {
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[target_object.into()],
+                                            "onIOError".into(),
+                                        )?;
+                                    }
+                                    FetchError::UnsuccessfulStatusCode => {
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[
+                                                target_object.into(),
+                                                total_size_bytes.into(),
+                                                total_size_bytes.into(),
+                                            ],
+                                            "onProgress".into(),
+                                        )?;
+
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[target_object.into()],
+                                            "onHTTPError".into(),
+                                        )?;
+                                    }
+                                    FetchError::Other(msg) => {
+                                        log::warn!("Unhandled fetch error: {:?}", msg);
+                                        // For now we will just handle this like a dns error
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[target_object.into()],
+                                            "onIOError".into(),
+                                        )?;
+                                    }
+                                }
+                            }
+                            _ => {
+                                // We got something other than a FetchError from calling fetch, this should be unlikely
+                                log::warn!("Unhandled non-fetch error: {:?}", err);
+                            }
+                        }
                     }
                 }
 

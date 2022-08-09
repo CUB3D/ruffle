@@ -11,12 +11,8 @@ C:undefined
 N:test.txt
 T:.txt
 -----
-// onProgress
+// onIoError
 C:undefined
 N:test.txt
 T:.txt
 -----
-// onHttpError
-C:undefined
-N:test.txt
-T:.txt

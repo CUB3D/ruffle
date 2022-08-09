@@ -1,4 +1,5 @@
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
+use image::EncodableLayout;
 use ruffle_core::backend::ui::{
     DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
 };
@@ -60,7 +61,7 @@ impl FileDialogResult for TestFileDialogResult {
     }
 
     fn contents(&self) -> &[u8] {
-        &[]
+        b"Hello, World\n".as_bytes()
     }
 
     fn write(&self, data: &[u8]) {}

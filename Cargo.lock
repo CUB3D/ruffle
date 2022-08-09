@@ -3722,6 +3722,7 @@ name = "tests"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "chrono",
  "env_logger",
  "futures",
  "image",
@@ -3730,6 +3731,7 @@ dependencies = [
  "ruffle_core",
  "ruffle_input_format",
  "ruffle_render_wgpu",
+ "url",
 ]
 
 [[package]]

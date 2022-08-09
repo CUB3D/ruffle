@@ -1,6 +1,4 @@
-use ruffle_core::backend::navigator::{
-    NavigationMethod, NavigatorBackend, NullExecutor, NullSpawner, OwnedFuture, Request, Response,
-};
+use ruffle_core::backend::navigator::{FetchError, NavigationMethod, NavigatorBackend, NullExecutor, NullSpawner, OwnedFuture, Request, Response};
 use ruffle_core::backend::ui::LoaderError;
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
@@ -60,9 +58,14 @@ impl NavigatorBackend for TestNavigatorBackend {
             });
         }
 
-        if request.url().contains("?debug-error") {
+        if request.url().contains("?debug-error-statuscode") {
             return Box::pin(
-                async move { Err(Error::FetchError("Error opening URL".to_string())) },
+                async move { Err(Error::FetchError(FetchError::UnsuccessfulStatusCode)) },
+            );
+        }
+        if request.url().contains("?debug-error-dns") {
+            return Box::pin(
+                async move { Err(Error::FetchError(FetchError::InvalidDomain)) },
             );
         }
 
@@ -71,10 +74,10 @@ impl NavigatorBackend for TestNavigatorBackend {
 
         Box::pin(async move {
             let url = Self::url_from_file_path(&path)
-                .map_err(|()| Error::FetchError("Invalid URL".to_string()))?
+                .map_err(|()| Error::FetchError(FetchError::Other("Invalid URL".to_string())))?
                 .into();
 
-            let body = std::fs::read(path).map_err(|e| Error::FetchError(e.to_string()))?;
+            let body = std::fs::read(path).map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
 
             Ok(Response { url, body })
         })
