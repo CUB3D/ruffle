@@ -11,7 +11,7 @@ use approx::assert_relative_eq;
 use regex::Regex;
 use ruffle_core::backend::{
     log::LogBackend,
-    navigator::{NullExecutor, NullNavigatorBackend},
+    navigator::{NullExecutor},
     storage::{MemoryStorageBackend, StorageBackend},
 };
 use ruffle_core::context::UpdateContext;

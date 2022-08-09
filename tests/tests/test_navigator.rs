@@ -2,7 +2,6 @@ use ruffle_core::backend::navigator::{
     FetchError, NavigationMethod, NavigatorBackend, NullExecutor, NullSpawner, OwnedFuture,
     Request, Response,
 };
-use ruffle_core::backend::ui::LoaderError;
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
 use std::path::{Path, PathBuf};
@@ -48,10 +47,9 @@ impl NavigatorBackend for TestNavigatorBackend {
     fn navigate_to_url(
         &self,
         _url: String,
-        _window: Option<String>,
+        _target: String,
         _vars_method: Option<(NavigationMethod, IndexMap<String, String>)>,
-    ) {
-    }
+    ) {}
 
     fn fetch(&self, request: Request) -> OwnedFuture<Response, Error> {
         if request.url().contains("?debug-success") {

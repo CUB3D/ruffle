@@ -1,4 +1,4 @@
-// fileref.download http error
+// fileref.download (http error)
 true
 // onSelect
 C:undefined
@@ -10,7 +10,7 @@ C:undefined
 N:debug-success.txt
 T:.txt
 -----
-Error opening URL 'http://example.com/test?debug-error'
+Error opening URL 'http://example.com/test?debug-error-statuscode'
 // onIoError
 C:undefined
 N:debug-success.txt
