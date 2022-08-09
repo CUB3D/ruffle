@@ -4,6 +4,12 @@ false
 false
 // fileref.browse([{ extension: '' }])
 false
+// fileref.download()
+false
+// fileref.download('@')
+false
+// fileref.download('baddomain')
+false
 // fileref.download success
 true
 // onSelect
