@@ -1386,7 +1386,7 @@ impl<'gc> Loader<'gc> {
             player.lock().unwrap().ui_mut().close_file_dialog();
 
             // Download the data
-            let req = Request::get(url);
+            let req = Request::get(url.clone());
             // Doing this in two steps to prevent holding the player lock during fetch
             let future = player.lock().unwrap().navigator().fetch(req);
             let download_res = future.await;
@@ -1423,6 +1423,7 @@ impl<'gc> Loader<'gc> {
                                 "onSelect".into(),
                             )?;
 
+                            //TODO: this callback should only be ran if either the download was successful or the download failed with a body, like onProgress on error below
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
@@ -1464,7 +1465,11 @@ impl<'gc> Loader<'gc> {
                                         "onComplete".into(),
                                     )?;
                                 }
-                                Err(_err) => {
+                                Err(_) => {
+                                    activation
+                                        .context
+                                        .avm_trace(&format!("Error opening URL '{}'", url));
+
                                     as_broadcaster::broadcast_internal(
                                         &mut activation,
                                         target_object,
@@ -1473,6 +1478,8 @@ impl<'gc> Loader<'gc> {
                                     )?;
 
                                     // Flash still executes the onProgress callback, even after an error
+                                    // However it should only be called if the error is due to a HTTP error code e.g. 404
+                                    // TODO: If the error is that the target domain wasn't found, this callback should *not* be ran
                                     //TODO: This should be the size of the HTTP body in bytes, but we don't have access to it here
                                     let total_bytes = 100;
 

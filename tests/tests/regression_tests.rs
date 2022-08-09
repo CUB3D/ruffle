@@ -2,6 +2,11 @@
 //!
 //! Trace output can be compared with correct output from the official Flash Player.
 
+pub mod test_navigator;
+pub mod test_ui;
+
+use crate::test_navigator::TestNavigatorBackend;
+use crate::test_ui::TestUiBackend;
 use approx::assert_relative_eq;
 use regex::Regex;
 use ruffle_core::backend::{
@@ -602,6 +607,9 @@ swf_tests! {
     (define_local_with_paths, "avm1/define_local_with_paths", 1),
     (delete, "avm1/delete", 3),
     (file_reference_browse_cancel, "avm1/file_reference_browse_cancel", 1),
+    (file_reference_download_success, "avm1/file_reference_download_success", 1),
+    (file_reference_download_cancel, "avm1/file_reference_download_cancel", 1),
+    (file_reference_download_httperror, "avm1/file_reference_download_httperror", 1),
     (displacement_map_filter, "avm1/displacement_map_filter", 1),
     (divide_swf4, "avm1/divide_swf4", 1),
     (do_init_action, "avm1/do_init_action", 3),
@@ -1352,13 +1360,14 @@ fn run_swf(
 
     let player = builder
         .with_log(TestLogBackend::new(trace_output.clone()))
-        .with_navigator(NullNavigatorBackend::with_base_path(base_path, &executor))
+        .with_navigator(TestNavigatorBackend::with_base_path(base_path, &executor))
         .with_max_execution_duration(Duration::from_secs(300))
         .with_viewport_dimensions(
             movie.width().to_pixels() as u32,
             movie.height().to_pixels() as u32,
             1.0,
         )
+        .with_ui(TestUiBackend::default())
         .with_movie(movie)
         .build();
 

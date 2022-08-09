@@ -1,0 +1,52 @@
+// fileref.download success
+true
+// onSelect
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+// onOpen
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+// onProgress
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+// onComplete
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+// fileref.download cancel
+true
+// onCancel
+C:undefined
+N:undefined
+T:undefined
+-----
+// fileref.download http error
+true
+// onSelect
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+// onOpen
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+Error opening URL 'http://example.com/test?debug-error'
+// onIoError
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
+// onProgress
+C:undefined
+N:debug-success.txt
+T:.txt
+-----
