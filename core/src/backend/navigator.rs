@@ -7,8 +7,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use swf::avm1::types::SendVarsMethod;
-use url::{ParseError, Url};
 use thiserror::Error;
+use url::{ParseError, Url};
 
 /// Attempt to convert a relative URL into an absolute URL, using the base URL
 /// if necessary.
@@ -322,7 +322,8 @@ impl NavigatorBackend for NullNavigatorBackend {
                 .map_err(|()| Error::FetchError(FetchError::Other("Invalid URL".to_string())))?
                 .into();
 
-            let body = std::fs::read(path).map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
+            let body = std::fs::read(path)
+                .map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
 
             Ok(Response { url, body })
         })

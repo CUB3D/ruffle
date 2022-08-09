@@ -1,10 +1,23 @@
-use ruffle_core::backend::navigator::{FetchError, NavigationMethod, NavigatorBackend, NullExecutor, NullSpawner, OwnedFuture, Request, Response};
+use ruffle_core::backend::navigator::{
+    FetchError, NavigationMethod, NavigatorBackend, NullExecutor, NullSpawner, OwnedFuture,
+    Request, Response,
+};
 use ruffle_core::backend::ui::LoaderError;
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
 use std::path::{Path, PathBuf};
 use url::Url;
 
+/// This is an implementation of [`NavigatorBackend`], designed for use in tests
+///
+/// This is essentially the same as [`NullNavigatorBackend`], however attempting to fetch URLs containing
+/// the following "hints" will cause a simulated response:
+/// * "?debug-success" -> Simulates a successful fetch, with body "Hello, World!"
+/// * "?debug-error-statuscode" -> Simulates a failed fetch due to a unsuccessful status
+/// * "?debug-error-dns" -> Simulates a failed fetch due to a dns resolution error
+///
+/// These are formatted as query params, rather than domains/whole URLs, so that real/real-invalid
+/// URLs can be used in Flash Player when writing tests
 pub struct TestNavigatorBackend {
     spawner: NullSpawner,
 
@@ -13,14 +26,6 @@ pub struct TestNavigatorBackend {
 }
 
 impl TestNavigatorBackend {
-    pub fn new() -> Self {
-        let executor = NullExecutor::new();
-        Self {
-            spawner: executor.spawner(),
-            relative_base_path: PathBuf::new(),
-        }
-    }
-
     pub fn with_base_path(path: &Path, executor: &NullExecutor) -> Self {
         Self {
             spawner: executor.spawner(),
@@ -64,9 +69,7 @@ impl NavigatorBackend for TestNavigatorBackend {
             );
         }
         if request.url().contains("?debug-error-dns") {
-            return Box::pin(
-                async move { Err(Error::FetchError(FetchError::InvalidDomain)) },
-            );
+            return Box::pin(async move { Err(Error::FetchError(FetchError::InvalidDomain)) });
         }
 
         let mut path = self.relative_base_path.clone();
@@ -77,7 +80,8 @@ impl NavigatorBackend for TestNavigatorBackend {
                 .map_err(|()| Error::FetchError(FetchError::Other("Invalid URL".to_string())))?
                 .into();
 
-            let body = std::fs::read(path).map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
+            let body = std::fs::read(path)
+                .map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
 
             Ok(Response { url, body })
         })

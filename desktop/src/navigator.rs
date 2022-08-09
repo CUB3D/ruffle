@@ -1,15 +1,17 @@
 //! Navigator backend for web
 
 use crate::custom_event::RuffleEvent;
+use isahc::error::ErrorKind;
 use isahc::{
     config::RedirectPolicy, prelude::*, AsyncReadResponseExt, HttpClient, Request as IsahcRequest,
 };
-use ruffle_core::backend::navigator::{FetchError, NavigationMethod, NavigatorBackend, OwnedFuture, Request, Response};
+use ruffle_core::backend::navigator::{
+    FetchError, NavigationMethod, NavigatorBackend, OwnedFuture, Request, Response,
+};
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use isahc::error::ErrorKind;
 use url::Url;
 use winit::event_loop::EventLoopProxy;
 
@@ -150,8 +152,9 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                 Ok(Response { url, body })
             }),
             _ => Box::pin(async move {
-                let client =
-                    client.ok_or_else(|| Error::FetchError(FetchError::Other("Network unavailable".to_string())))?;
+                let client = client.ok_or_else(|| {
+                    Error::FetchError(FetchError::Other("Network unavailable".to_string()))
+                })?;
 
                 let isahc_request = match request.method() {
                     NavigationMethod::Get => IsahcRequest::get(processed_url.to_string()),
@@ -164,23 +167,17 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                     .body(body_data)
                     .map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
 
-                let mut response = client
-                    .send_async(body)
-                    .await
-                    .map_err(|e| {
-                        let inner = match e.kind() {
-                            ErrorKind::NameResolution => FetchError::InvalidDomain,
-                            _ => FetchError::Other(e.to_string()),
-                        };
-
-                        Error::FetchError(inner)
-                    })?;
+                let mut response = client.send_async(body).await.map_err(|e| {
+                    let inner = match e.kind() {
+                        ErrorKind::NameResolution => FetchError::InvalidDomain,
+                        _ => FetchError::Other(e.to_string()),
+                    };
+                    Error::FetchError(inner)
+                })?;
 
                 if !response.status().is_success() {
-                    return Err(Error::FetchError(FetchError::Other(format!(
-                        "HTTP status is not ok, got {}",
-                        response.status()
-                    ))));
+                    log::warn!("HTTP status is not ok, got {}", response.status());
+                    return Err(Error::FetchError(FetchError::UnsuccessfulStatusCode));
                 }
 
                 let url = if let Some(uri) = response.effective_uri() {

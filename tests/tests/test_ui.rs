@@ -1,9 +1,12 @@
-use chrono::{DateTime, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use image::EncodableLayout;
 use ruffle_core::backend::ui::{
     DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
 };
 
+/// A simulated file dialog response, for use in tests
+///
+/// Currently this can only simulate either a user cancellation result, or a successful file selection
 #[derive(Default)]
 pub struct TestFileDialogResult {
     canceled: bool,
@@ -18,7 +21,7 @@ impl TestFileDialogResult {
         }
     }
 
-    fn new_success(file_name: String, file_size: u64) -> Self {
+    fn new_success(file_name: String) -> Self {
         Self {
             canceled: false,
             file_name: Some(file_name),
@@ -32,11 +35,6 @@ impl FileDialogResult for TestFileDialogResult {
     }
 
     fn creation_time(&self) -> Option<DateTime<Utc>> {
-        /*
-        let d: DateTime<Utc> = Utc.datetime_from_str("2022-08-07T21:32:58", "%Y-%m-%dT%H:%M:%S").unwrap();
-        let d = d.with_timezone(&FixedOffset::east(60 * 60));
-
-        (!self.is_cancelled()).then(|| d)*/
         None
     }
 
@@ -61,14 +59,21 @@ impl FileDialogResult for TestFileDialogResult {
     }
 
     fn contents(&self) -> &[u8] {
-        b"Hello, World\n".as_bytes()
+        b"Hello, World!".as_bytes()
     }
 
-    fn write(&self, data: &[u8]) {}
+    fn write(&self, _data: &[u8]) {}
 
     fn refresh(&mut self) {}
 }
 
+/// This is an implementation of [`UiBackend`], designed for use in tests
+///
+/// Fundamentally, this is mostly the same as [`NullUiBackend`] with the following differences:
+/// * Attempting to display an open dialog with a filter with description "debug-select-success" will simulate successfully selecting a file,
+///   otherwise a user cancellation will be simulated
+/// * Attempting to display a file save dialog with a file name hint of "debug-success.txt" will simulate successfully selecting a destination
+///   otherwise a user cancellation will be simulated
 #[derive(Default)]
 pub struct TestUiBackend;
 
@@ -83,7 +88,7 @@ impl UiBackend for TestUiBackend {
 
     fn set_clipboard_content(&mut self, _content: String) {}
 
-    fn set_fullscreen(&mut self, is_full: bool) -> Result<(), Error> {
+    fn set_fullscreen(&mut self, _is_full: bool) -> Result<(), Error> {
         Ok(())
     }
 
@@ -91,7 +96,7 @@ impl UiBackend for TestUiBackend {
 
     fn display_root_movie_download_failed_message(&self) {}
 
-    fn message(&self, message: &str) {}
+    fn message(&self, _message: &str) {}
 
     fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
         Some(Box::pin(async move {
@@ -103,7 +108,6 @@ impl UiBackend for TestUiBackend {
             {
                 Ok(Box::new(TestFileDialogResult::new_success(
                     "test.txt".to_string(),
-                    13,
                 )))
             } else {
                 Ok(Box::new(TestFileDialogResult::new_canceled()))
@@ -123,7 +127,7 @@ impl UiBackend for TestUiBackend {
 
             let result: Result<Box<dyn FileDialogResult>, LoaderError> =
                 if file_name == "debug-success.txt" {
-                    Ok(Box::new(TestFileDialogResult::new_success(file_name, 1256)))
+                    Ok(Box::new(TestFileDialogResult::new_success(file_name)))
                 } else {
                     Ok(Box::new(TestFileDialogResult::new_canceled()))
                 };
