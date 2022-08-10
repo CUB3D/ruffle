@@ -128,8 +128,9 @@ pub enum FetchError {
     InvalidDomain,
 
     /// The destination returned a status code that indicated a failure
+    /// * `body` contains the bytes of the HTTP body
     #[error("Destination returned an unsuccessful status code")]
-    UnsuccessfulStatusCode,
+    UnsuccessfulStatusCode { body: Vec<u8> },
 
     /// Some other error occurred
     #[error("Other fetch error {0}")]

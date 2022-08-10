@@ -177,7 +177,14 @@ impl NavigatorBackend for ExternalNavigatorBackend {
 
                 if !response.status().is_success() {
                     log::warn!("HTTP status is not ok, got {}", response.status());
-                    return Err(Error::FetchError(FetchError::UnsuccessfulStatusCode));
+                    let bytes = response
+                        .bytes()
+                        .await
+                        .map_err(|e| Error::FetchError(FetchError::Other(e.to_string())))?;
+
+                    return Err(Error::FetchError(FetchError::UnsuccessfulStatusCode {
+                        body: bytes,
+                    }));
                 }
 
                 let url = if let Some(uri) = response.effective_uri() {

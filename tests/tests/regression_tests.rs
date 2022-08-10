@@ -11,7 +11,7 @@ use approx::assert_relative_eq;
 use regex::Regex;
 use ruffle_core::backend::{
     log::LogBackend,
-    navigator::{NullExecutor},
+    navigator::NullExecutor,
     storage::{MemoryStorageBackend, StorageBackend},
 };
 use ruffle_core::context::UpdateContext;
@@ -609,7 +609,8 @@ swf_tests! {
     (file_reference_browse_cancel, "avm1/file_reference_browse_cancel", 1),
     (file_reference_download_success, "avm1/file_reference_download_success", 1),
     (file_reference_download_cancel, "avm1/file_reference_download_cancel", 1),
-    (file_reference_download_httperror, "avm1/file_reference_download_httperror", 1),
+    (file_reference_download_httperror_status_code, "avm1/file_reference_download_httperror_status_code", 1),
+    (file_reference_download_httperror_dns_error, "avm1/file_reference_download_httperror_dns_error", 1),
     (file_reference_upload_success, "avm1/file_reference_upload_success", 1),
     (file_reference_upload_httperror_dns_error, "avm1/file_reference_upload_httperror_dns_error", 1),
     (file_reference_upload_httperror_status_code, "avm1/file_reference_upload_httperror_status_code", 1),

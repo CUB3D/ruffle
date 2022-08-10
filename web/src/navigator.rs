@@ -201,7 +201,10 @@ impl NavigatorBackend for WebNavigatorBackend {
             let response: WebResponse = fetchval.dyn_into().unwrap();
             if !response.ok() {
                 log::warn!("HTTP status is not ok, got {}", response.status_text());
-                return Err(Error::FetchError(FetchError::UnsuccessfulStatusCode));
+
+                return Err(Error::FetchError(FetchError::UnsuccessfulStatusCode {
+                    body: Vec::new(),
+                }));
             }
 
             let url = response.url();

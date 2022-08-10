@@ -18,14 +18,13 @@ pub struct DesktopFileDialogResult {
 
 impl DesktopFileDialogResult {
     /// Create a new [`DesktopFileDialogResult`] from a given file handle
-    pub async fn new(handle: Option<FileHandle>) -> Self {
+    pub fn new(handle: Option<FileHandle>) -> Self {
         let md = handle.as_ref().and_then(|x| fs::metadata(x.path()).ok());
 
-        let contents = if let Some(handle) = &handle {
-            handle.read().await
-        } else {
-            Vec::new()
-        };
+        let contents = handle
+            .as_ref()
+            .and_then(|handle| fs::read(handle.path()).ok())
+            .unwrap_or_default();
 
         Self {
             handle,
@@ -224,7 +223,7 @@ impl UiBackend for DesktopUiBackend {
             }
 
             let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
-                DesktopFileDialogResult::new(dialog.pick_file().await).await,
+                DesktopFileDialogResult::new(dialog.pick_file().await),
             ));
             result
         }))
@@ -249,7 +248,7 @@ impl UiBackend for DesktopUiBackend {
                 .set_file_name(&file_name);
 
             let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
-                DesktopFileDialogResult::new(dialog.save_file().await).await,
+                DesktopFileDialogResult::new(dialog.save_file().await),
             ));
             result
         }))

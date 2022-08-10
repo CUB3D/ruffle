@@ -49,7 +49,8 @@ impl NavigatorBackend for TestNavigatorBackend {
         _url: String,
         _target: String,
         _vars_method: Option<(NavigationMethod, IndexMap<String, String>)>,
-    ) {}
+    ) {
+    }
 
     fn fetch(&self, request: Request) -> OwnedFuture<Response, Error> {
         if request.url().contains("?debug-success") {
@@ -62,9 +63,11 @@ impl NavigatorBackend for TestNavigatorBackend {
         }
 
         if request.url().contains("?debug-error-statuscode") {
-            return Box::pin(
-                async move { Err(Error::FetchError(FetchError::UnsuccessfulStatusCode)) },
-            );
+            return Box::pin(async move {
+                Err(Error::FetchError(FetchError::UnsuccessfulStatusCode {
+                    body: vec![0u8; 10],
+                }))
+            });
         }
         if request.url().contains("?debug-error-dns") {
             return Box::pin(async move { Err(Error::FetchError(FetchError::InvalidDomain)) });

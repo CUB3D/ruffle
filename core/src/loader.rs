@@ -1424,16 +1424,15 @@ impl<'gc> Loader<'gc> {
                                 "onSelect".into(),
                             )?;
 
-                            //TODO: this callback should only be ran if either the download was successful or the download failed with a body, like onProgress on error below
-                            as_broadcaster::broadcast_internal(
-                                &mut activation,
-                                target_object,
-                                &[target_object.into()],
-                                "onOpen".into(),
-                            )?;
-
                             match download_res {
                                 Ok(download_res) => {
+                                    as_broadcaster::broadcast_internal(
+                                        &mut activation,
+                                        target_object,
+                                        &[target_object.into()],
+                                        "onOpen".into(),
+                                    )?;
+
                                     // onProgress and onComplete expect to receive the current state
                                     // of the file, as we simulate an instant 100% download from the
                                     // perspective of AS, we want to refresh the file_ref internal data
@@ -1466,34 +1465,56 @@ impl<'gc> Loader<'gc> {
                                         "onComplete".into(),
                                     )?;
                                 }
-                                Err(_) => {
-                                    activation
-                                        .context
-                                        .avm_trace(&format!("Error opening URL '{}'", url));
+                                Err(err) => {
+                                    match err {
+                                        Error::FetchError(err) => {
+                                            // If the error happens before the connection is
+                                            // established, then don't invoke onOpen
+                                            if !matches!(err, FetchError::InvalidDomain) {
+                                                as_broadcaster::broadcast_internal(
+                                                    &mut activation,
+                                                    target_object,
+                                                    &[target_object.into()],
+                                                    "onOpen".into(),
+                                                )?;
+                                            }
 
-                                    as_broadcaster::broadcast_internal(
-                                        &mut activation,
-                                        target_object,
-                                        &[target_object.into()],
-                                        "onIOError".into(),
-                                    )?;
+                                            activation
+                                                .context
+                                                .avm_trace(&format!("Error opening URL '{}'", url));
 
-                                    // Flash still executes the onProgress callback, even after an error
-                                    // However it should only be called if the error is due to a HTTP error code e.g. 404
-                                    // TODO: If the error is that the target domain wasn't found, this callback should *not* be ran
-                                    //TODO: This should be the size of the HTTP body in bytes, but we don't have access to it here
-                                    let total_bytes = 100;
+                                            as_broadcaster::broadcast_internal(
+                                                &mut activation,
+                                                target_object,
+                                                &[target_object.into()],
+                                                "onIOError".into(),
+                                            )?;
 
-                                    as_broadcaster::broadcast_internal(
-                                        &mut activation,
-                                        target_object,
-                                        &[
-                                            target_object.into(),
-                                            total_bytes.into(),
-                                            total_bytes.into(),
-                                        ],
-                                        "onProgress".into(),
-                                    )?;
+                                            if let FetchError::UnsuccessfulStatusCode { body } = err
+                                            {
+                                                let total_bytes = body.len();
+
+                                                // Flash still executes the onProgress callback, even after an error
+                                                // However it should only be called if the error occurred after the connection was established
+                                                as_broadcaster::broadcast_internal(
+                                                    &mut activation,
+                                                    target_object,
+                                                    &[
+                                                        target_object.into(),
+                                                        total_bytes.into(),
+                                                        total_bytes.into(),
+                                                    ],
+                                                    "onProgress".into(),
+                                                )?;
+                                            }
+                                        }
+                                        _ => {
+                                            log::warn!(
+                                                "Unhandled non-fetch error on download: {:?}",
+                                                err
+                                            );
+                                        }
+                                    }
                                 }
                             }
                         } else {
@@ -1621,8 +1642,6 @@ impl<'gc> Loader<'gc> {
                         // this should call onProgress with the size of the error response body,
                         // then should call onHTTPError
 
-                        println!("e = {:?}", err);
-
                         match err {
                             Error::FetchError(err) => {
                                 match err {
@@ -1634,7 +1653,7 @@ impl<'gc> Loader<'gc> {
                                             "onIOError".into(),
                                         )?;
                                     }
-                                    FetchError::UnsuccessfulStatusCode => {
+                                    FetchError::UnsuccessfulStatusCode { .. } => {
                                         as_broadcaster::broadcast_internal(
                                             &mut activation,
                                             target_object,
@@ -1667,7 +1686,7 @@ impl<'gc> Loader<'gc> {
                             }
                             _ => {
                                 // We got something other than a FetchError from calling fetch, this should be unlikely
-                                log::warn!("Unhandled non-fetch error: {:?}", err);
+                                log::warn!("Unhandled non-fetch error on upload: {:?}", err);
                             }
                         }
                     }
