@@ -126,9 +126,7 @@ impl FileDialogResult for WebFileDialogResult {
         //NOOP
     }
 
-    fn refresh(&mut self) {
-        todo!()
-    }
+    fn refresh(&mut self) {}
 }
 
 /// An implementation of `UiBackend` utilizing `web_sys` bindings to input APIs.
