@@ -31,6 +31,7 @@ pub mod drop_shadow_filter;
 pub(crate) mod error;
 mod external_interface;
 mod file_reference;
+mod file_reference_list;
 mod function;
 mod glow_filter;
 pub mod gradient_bevel_filter;
@@ -62,7 +63,6 @@ mod transform;
 mod video;
 mod xml;
 mod xml_node;
-mod file_reference_list;
 
 const GLOBAL_DECLS: &[Declaration] = declare_properties! {
     "trace" => method(trace; DONT_ENUM);

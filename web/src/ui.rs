@@ -1,7 +1,8 @@
 use super::JavascriptPlayer;
 use rfd::{AsyncFileDialog, FileHandle};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
+    DialogResultFuture, Error, FileDialogResult, FileFilter, FileSelection, ListFileSelectionGroup,
+    MouseCursor, UiBackend,
 };
 use ruffle_web_common::JsResult;
 use std::path::Path;
@@ -29,18 +30,14 @@ impl std::error::Error for FullScreenError {
     }
 }
 
-pub struct WebFileDialogResult {
-    handle: Option<FileHandle>,
+pub struct WebFileSelection {
+    handle: FileHandle,
     contents: Vec<u8>,
 }
 
-impl WebFileDialogResult {
-    pub async fn new(handle: Option<FileHandle>) -> Self {
-        let contents = if let Some(handle) = handle.as_ref() {
-            handle.read().await
-        } else {
-            Vec::new()
-        };
+impl WebFileSelection {
+    pub async fn new(handle: FileHandle) -> Self {
+        let contents = handle.read().await;
 
         Self { handle, contents }
     }
@@ -53,11 +50,7 @@ fn get_extension_from_filename(filename: &str) -> Option<String> {
         .map(|x| ".".to_owned() + x)
 }
 
-impl FileDialogResult for WebFileDialogResult {
-    fn is_cancelled(&self) -> bool {
-        self.handle.is_none()
-    }
-
+impl FileSelection for WebFileSelection {
     // For some reason the test suite compiles this code.
     #[cfg(not(target_arch = "wasm32"))]
     fn creation_time(&self) -> Option<DateTime<Utc>> {
@@ -78,18 +71,14 @@ impl FileDialogResult for WebFileDialogResult {
 
     #[cfg(target_arch = "wasm32")]
     fn modification_time(&self) -> Option<DateTime<Utc>> {
-        if let Some(handle) = &self.handle {
-            Some(DateTime::<Utc>::from_utc(
-                NaiveDateTime::from_timestamp(handle.inner().last_modified() as i64, 0),
-                Utc,
-            ))
-        } else {
-            None
-        }
+        Some(DateTime::<Utc>::from_utc(
+            NaiveDateTime::from_timestamp(self.handle.inner().last_modified() as i64, 0),
+            Utc,
+        ))
     }
 
     fn file_name(&self) -> Option<String> {
-        self.handle.as_ref().map(|handle| handle.file_name())
+        Some(self.handle.file_name())
     }
 
     // For some reason the test suite compiles this code.
@@ -100,15 +89,11 @@ impl FileDialogResult for WebFileDialogResult {
 
     #[cfg(target_arch = "wasm32")]
     fn size(&self) -> Option<u64> {
-        self.handle.as_ref().map(|x| x.inner().size() as u64)
+        self.handle.inner().size() as u64
     }
 
     fn file_type(&self) -> Option<String> {
-        if let Some(handle) = &self.handle {
-            get_extension_from_filename(&handle.file_name())
-        } else {
-            None
-        }
+        get_extension_from_filename(&self.handle.file_name())
     }
 
     fn creator(&self) -> Option<String> {
@@ -207,7 +192,11 @@ impl UiBackend for WebUiBackend {
         self.js_player.display_message(message);
     }
 
-    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(
+        &mut self,
+        filters: Vec<FileFilter>,
+        multiple_files: bool,
+    ) -> Option<DialogResultFuture> {
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
@@ -233,10 +222,33 @@ impl UiBackend for WebUiBackend {
                 }
             }
 
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
-                WebFileDialogResult::new(dialog.pick_file().await).await,
-            ));
-            result
+            let result = if multiple_files {
+                let files = dialog.pick_files().await;
+
+                if let Some(files) = files {
+                    let mut out = Vec::with_capacity(files.len());
+                    for f in files {
+                        let x: Box<dyn FileSelection> = Box::new(WebFileSelection::new(f).await);
+                        out.push(x);
+                    }
+
+                    FileDialogResult::Selection(ListFileSelectionGroup::new(out))
+                } else {
+                    FileDialogResult::Canceled
+                }
+            } else {
+                let file = dialog.pick_file().await;
+
+                if let Some(file) = file {
+                    FileDialogResult::Selection(ListFileSelectionGroup::new(vec![Box::new(
+                        WebFileSelection::new(file).await,
+                    )]))
+                } else {
+                    FileDialogResult::Canceled
+                }
+            };
+
+            Ok(result)
         }))
     }
 

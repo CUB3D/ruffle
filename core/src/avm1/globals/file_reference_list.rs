@@ -21,7 +21,6 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-
 pub fn browse<'gc>(
     activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
@@ -78,7 +77,10 @@ pub fn browse<'gc>(
         _ => return Ok(Value::Undefined),
     };
 
-    let dialog = activation.context.ui.display_file_open_dialog(file_filters, true);
+    let dialog = activation
+        .context
+        .ui
+        .display_file_open_dialog(file_filters, true);
 
     let result = match dialog {
         Some(dialog) => {

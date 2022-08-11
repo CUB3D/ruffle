@@ -2,7 +2,7 @@ use crate::add_field_accessors;
 use crate::avm1::activation::Activation;
 use crate::avm1::object::date_object::DateObject;
 use crate::avm1::{Object, ScriptObject, TObject};
-use crate::backend::ui::{FileDialogResult, FileSelection};
+use crate::backend::ui::FileSelection;
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::fmt;

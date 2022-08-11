@@ -3,8 +3,9 @@
 use crate::avm1::activation::{Activation, ActivationIdentifier};
 use crate::avm1::function::ExecutionReason;
 use crate::avm1::globals::as_broadcaster;
-use crate::avm1::{Avm1, Object, TObject, Value};
 use crate::avm1::object::array_object::ArrayObject;
+use crate::avm1::object::file_reference::FileReferenceObject;
+use crate::avm1::{Avm1, Object, TObject, Value};
 use crate::avm2::bytearray::ByteArrayStorage;
 use crate::avm2::names::Namespace;
 use crate::avm2::object::ByteArrayObject;
@@ -34,7 +35,6 @@ use std::sync::{Arc, Mutex, Weak};
 use swf::read::read_compression_type;
 use thiserror::Error;
 use url::form_urlencoded;
-use crate::avm1::object::file_reference::{FileReferenceObject};
 
 pub type Handle = Index;
 
@@ -186,7 +186,7 @@ impl<'gc> LoadManager<'gc> {
             | Loader::FileDialog { self_handle, .. }
             | Loader::DownloadFileDialog { self_handle, .. }
             | Loader::UploadFile { self_handle, .. }
-            | Loader::MultiFileDialog { self_handle, ..} => *self_handle = Some(handle),
+            | Loader::MultiFileDialog { self_handle, .. } => *self_handle = Some(handle),
         }
         handle
     }
@@ -547,7 +547,7 @@ impl<'gc> Loader<'gc> {
             Loader::LoadURLLoader { self_handle, .. } => *self_handle = Some(handle),
             Loader::DownloadFileDialog { self_handle, .. } => *self_handle = Some(handle),
             Loader::UploadFile { self_handle, .. } => *self_handle = Some(handle),
-            Loader::MultiFileDialog { self_handle, ..} => *self_handle = Some(handle),
+            Loader::MultiFileDialog { self_handle, .. } => *self_handle = Some(handle),
         }
     }
 
@@ -1208,14 +1208,12 @@ impl<'gc> Loader<'gc> {
 
                 match dialog_result {
                     Ok(dialog_result) => {
-
                         match dialog_result {
                             FileDialogResult::Selection(selection) => {
                                 // File selections *must* have at least one file
                                 let file_selection = selection.first_file();
 
-                                file_ref
-                                    .init_from_dialog_result(&mut activation, file_selection);
+                                file_ref.init_from_dialog_result(&mut activation, file_selection);
                                 as_broadcaster::broadcast_internal(
                                     &mut activation,
                                     target_object,
@@ -1300,8 +1298,7 @@ impl<'gc> Loader<'gc> {
 
                                 // onSelect and onOpen should be called before the download begins
                                 // We simulate this by using the initial dialog result
-                                file_ref
-                                    .init_from_dialog_result(&mut activation, file_selection);
+                                file_ref.init_from_dialog_result(&mut activation, file_selection);
 
                                 as_broadcaster::broadcast_internal(
                                     &mut activation,
@@ -1365,9 +1362,10 @@ impl<'gc> Loader<'gc> {
                                                     )?;
                                                 }
 
-                                                activation
-                                                    .context
-                                                    .avm_trace(&format!("Error opening URL '{}'", url));
+                                                activation.context.avm_trace(&format!(
+                                                    "Error opening URL '{}'",
+                                                    url
+                                                ));
 
                                                 as_broadcaster::broadcast_internal(
                                                     &mut activation,
@@ -1376,7 +1374,8 @@ impl<'gc> Loader<'gc> {
                                                     "onIOError".into(),
                                                 )?;
 
-                                                if let FetchError::UnsuccessfulStatusCode { body } = err
+                                                if let FetchError::UnsuccessfulStatusCode { body } =
+                                                    err
                                                 {
                                                     let total_bytes = body.len();
 
@@ -1396,9 +1395,9 @@ impl<'gc> Loader<'gc> {
                                             }
                                             _ => {
                                                 log::warn!(
-                                                "Unhandled non-fetch error on download: {:?}",
-                                                err
-                                            );
+                                                    "Unhandled non-fetch error on download: {:?}",
+                                                    err
+                                                );
                                             }
                                         }
                                     }
@@ -1622,47 +1621,48 @@ impl<'gc> Loader<'gc> {
                 );
 
                 match dialog_result {
-                    Ok(dialog_result) => {
-                        match dialog_result {
-                            FileDialogResult::Selection(selection) => {
-                                let mut values = Vec::with_capacity(selection.file_count().into());
-                                for ii in 0..(selection.file_count().into()){
-                                    let file = selection.file(ii).unwrap();
+                    Ok(dialog_result) => match dialog_result {
+                        FileDialogResult::Selection(selection) => {
+                            let mut values = Vec::with_capacity(selection.file_count().into());
+                            for ii in 0..(selection.file_count().into()) {
+                                let file = selection.file(ii).unwrap();
 
-                                    let fr = FileReferenceObject::empty_object(activation.context.gc_context, Some(activation.context.avm1.prototypes().file_reference));
-                                    fr.init_from_dialog_result(&mut activation, file);
-
-                                    values.push(fr.into());
-                                }
-
-                                let array = ArrayObject::new(
+                                let fr = FileReferenceObject::empty_object(
                                     activation.context.gc_context,
-                                    activation.context.avm1.prototypes().array,
-                                    values,
+                                    Some(activation.context.avm1.prototypes().file_reference),
                                 );
+                                fr.init_from_dialog_result(&mut activation, file);
 
-                                target_object.set("fileList", array.into(), &mut activation)?;
-
-                                as_broadcaster::broadcast_internal(
-                                    &mut activation,
-                                    target_object,
-                                    &[target_object.into()],
-                                    "onSelect".into(),
-                                )?;
+                                values.push(fr.into());
                             }
-                            FileDialogResult::Canceled => {
-                                let array = ArrayObject::empty(&activation);
-                                target_object.set("fileList", array.into(), &mut activation)?;
 
-                                as_broadcaster::broadcast_internal(
-                                    &mut activation,
-                                    target_object,
-                                    &[target_object.into()],
-                                    "onCancel".into(),
-                                )?;
-                            }
+                            let array = ArrayObject::new(
+                                activation.context.gc_context,
+                                activation.context.avm1.prototypes().array,
+                                values,
+                            );
+
+                            target_object.set("fileList", array.into(), &mut activation)?;
+
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onSelect".into(),
+                            )?;
                         }
-                    }
+                        FileDialogResult::Canceled => {
+                            let array = ArrayObject::empty(&activation);
+                            target_object.set("fileList", array.into(), &mut activation)?;
+
+                            as_broadcaster::broadcast_internal(
+                                &mut activation,
+                                target_object,
+                                &[target_object.into()],
+                                "onCancel".into(),
+                            )?;
+                        }
+                    },
                     Err(err) => {
                         log::warn!("Error on file dialog: {}", err);
                     }

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use downcast_rs::Downcast;
 use std::collections::HashSet;
 use std::future::Future;
-use std::num::{NonZeroU8, NonZeroUsize};
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 
 /// Type alias for pinned, boxed, and owned futures that output a falliable
@@ -27,33 +27,61 @@ pub struct FileFilter {
 /// A result for a file selection
 pub enum FileDialogResult {
     /// The selection was successful
-    Selection(Box<dyn FileSelectionGroup>),
+    Selection(ListFileSelectionGroup),
 
     /// The selection was canceled
     Canceled,
 }
 
-/// Defines a collection of selected files, which must contain at least one file
-pub trait FileSelectionGroup: Downcast {
-    /// Refresh any internal metadata, any future calls to other functions (such as [FileDialogResult::size]) will reflect
+/// Defines a group of selected files, which must contain at least one file
+pub struct ListFileSelectionGroup {
+    files: Vec<Box<dyn FileSelection>>,
+}
+
+impl ListFileSelectionGroup {
+    pub fn new(files: Vec<Box<dyn FileSelection>>) -> Self {
+        assert!(
+            !files.is_empty(),
+            "FileSelectionGroups must have at least one element"
+        );
+        Self { files }
+    }
+
+    /// Refresh any internal metadata, any future calls to other functions (such as [FileSelection::size]) will reflect
     /// the state at the time of the last refresh
-    fn refresh(&mut self);
-    /// Get the number of files in this selection
-    fn file_count(&self) -> NonZeroUsize;
-    fn file(&self, id: usize) -> Option<&dyn FileSelection>;
-    fn file_mut(&mut self, id: usize) -> Option<&mut dyn FileSelection>;
+    pub fn refresh(&mut self) {
+        self.files.iter_mut().for_each(|f| f.refresh());
+    }
+
+    pub fn file_count(&self) -> NonZeroUsize {
+        self.files
+            .len()
+            .try_into()
+            .expect("Files must have at least one entry")
+    }
+
+    pub fn file(&self, id: usize) -> Option<&dyn FileSelection> {
+        let x: &dyn FileSelection = self.files.get(id)?.as_ref();
+        Some(x)
+    }
+
+    pub fn file_mut(&mut self, id: usize) -> Option<&mut dyn FileSelection> {
+        let x: &mut dyn FileSelection = self.files.get_mut(id)?.as_mut();
+        Some(x)
+    }
 
     /// Get the first file in the selection, as it always exists
-    fn first_file(&self) -> &dyn FileSelection {
-        self.file(0).expect("File selection must have at least one file")
+    pub fn first_file(&self) -> &dyn FileSelection {
+        self.file(0)
+            .expect("File selection must have at least one file")
     }
 
     /// Get a mutable reference to the first file in the selection, as it always exists
-    fn first_file_mut(&mut self) -> &mut dyn FileSelection {
-        self.file_mut(0).expect("File selection must have at least one file")
+    pub fn first_file_mut(&mut self) -> &mut dyn FileSelection {
+        self.file_mut(0)
+            .expect("File selection must have at least one file")
     }
 }
-impl_downcast!(FileSelectionGroup);
 
 /// Defines a single file selected from a dialog
 pub trait FileSelection: Downcast {
@@ -65,15 +93,14 @@ pub trait FileSelection: Downcast {
     fn creator(&self) -> Option<String>;
     fn contents(&self) -> &[u8];
     /// Write the given data to the chosen file
-    /// This will not necessarily by reflected in future calls to other functions (such as [FileDialogResult::size]),
-    /// until [FileDialogResult::refresh] is called
+    /// This will not necessarily by reflected in future calls to other functions (such as [FileSelection::size]),
+    /// until [FileSelection::refresh] is called
     fn write(&self, data: &[u8]);
-    /// Refresh any internal metadata, any future calls to other functions (such as [FileDialogResult::size]) will reflect
+    /// Refresh any internal metadata, any future calls to other functions (such as [FileSelection::size]) will reflect
     /// the state at the time of the last refresh
     fn refresh(&mut self);
 }
 impl_downcast!(FileSelection);
-
 
 /// Future representing a file selection in process
 pub type DialogResultFuture = OwnedFuture<FileDialogResult, LoaderError>;
@@ -113,7 +140,11 @@ pub trait UiBackend {
     /// # Returns
     /// * `None` If the dialog cannot be displayed
     /// * If the dialog is displayed, then the returned [`Vec`], should contain at least one item
-    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>, multiple_files: bool) -> Option<DialogResultFuture>;
+    fn display_file_open_dialog(
+        &mut self,
+        filters: Vec<FileFilter>,
+        multiple_files: bool,
+    ) -> Option<DialogResultFuture>;
 
     /// Display a dialog allowing a user to select a destination to save a file to
     ///
@@ -253,9 +284,7 @@ impl UiBackend for NullUiBackend {
         _filters: Vec<FileFilter>,
         _multiple_files: bool,
     ) -> Option<DialogResultFuture> {
-        Some(Box::pin(async move {
-            Ok(FileDialogResult::Canceled)
-        }))
+        Some(Box::pin(async move { Ok(FileDialogResult::Canceled) }))
     }
 
     fn close_file_dialog(&mut self) {}

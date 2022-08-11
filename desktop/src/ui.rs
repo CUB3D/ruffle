@@ -2,49 +2,13 @@ use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileSelectionGroup, FileFilter, FileSelection,
-    LoaderError, MouseCursor, UiBackend,
+    DialogResultFuture, Error, FileDialogResult, FileFilter, FileSelection, ListFileSelectionGroup,
+    MouseCursor, UiBackend,
 };
 use std::fs;
-use std::num::{NonZeroU8, NonZeroUsize};
 use std::rc::Rc;
 use winit::window::Fullscreen;
 use winit::window::Window;
-
-pub struct DesktopFileSelection {
-    files: Vec<DesktopFile>,
-}
-
-impl DesktopFileSelection {
-    pub fn new(files: Vec<FileHandle>) -> Self {
-        DesktopFileSelection {
-            files: files.into_iter().map(|f| DesktopFile::new(f)).collect(),
-        }
-    }
-}
-
-impl FileSelectionGroup for DesktopFileSelection {
-    fn refresh(&mut self) {
-        self.files.iter_mut().for_each(|f| f.refresh());
-    }
-
-    fn file_count(&self) -> NonZeroUsize {
-        self.files
-            .len()
-            .try_into()
-            .expect("Files must have at least one entry")
-    }
-
-    fn file(&self, id: usize) -> Option<&dyn FileSelection> {
-        let x: &dyn FileSelection = self.files.get(id)?;
-        Some(x)
-    }
-
-    fn file_mut(&mut self, id: usize) -> Option<&mut dyn FileSelection> {
-        let x: &mut dyn FileSelection = self.files.get_mut(id)?;
-        Some(x)
-    }
-}
 
 pub struct DesktopFile {
     handle: FileHandle,
@@ -242,7 +206,14 @@ impl UiBackend for DesktopUiBackend {
                 let files = dialog.pick_files().await;
 
                 if let Some(files) = files {
-                    FileDialogResult::Selection(Box::new(DesktopFileSelection::new(files)))
+                    let files = files
+                        .into_iter()
+                        .map(|f| {
+                            let x: Box<dyn FileSelection> = Box::new(DesktopFile::new(f));
+                            x
+                        })
+                        .collect::<Vec<_>>();
+                    FileDialogResult::Selection(ListFileSelectionGroup::new(files))
                 } else {
                     FileDialogResult::Canceled
                 }
@@ -250,7 +221,9 @@ impl UiBackend for DesktopUiBackend {
                 let file = dialog.pick_file().await;
 
                 if let Some(file) = file {
-                    FileDialogResult::Selection(Box::new(DesktopFileSelection::new(vec![file])))
+                    FileDialogResult::Selection(ListFileSelectionGroup::new(vec![Box::new(
+                        DesktopFile::new(file),
+                    )]))
                 } else {
                     FileDialogResult::Canceled
                 }
@@ -279,7 +252,9 @@ impl UiBackend for DesktopUiBackend {
                 .set_file_name(&file_name);
 
             let result = if let Some(file) = dialog.save_file().await {
-                FileDialogResult::Selection(Box::new(DesktopFileSelection::new(vec![file])))
+                FileDialogResult::Selection(ListFileSelectionGroup::new(vec![Box::new(
+                    DesktopFile::new(file),
+                )]))
             } else {
                 FileDialogResult::Canceled
             };
