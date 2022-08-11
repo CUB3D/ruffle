@@ -1616,8 +1616,6 @@ impl<'gc> Loader<'gc> {
                     _ => return Err(Error::NotMultiFileDialogLoader),
                 };
 
-                let file_ref = target_object.as_file_reference_object().unwrap();
-
                 let mut activation = Activation::from_stub(
                     uc.reborrow(),
                     ActivationIdentifier::root("[File Dialog]"),
@@ -1625,11 +1623,8 @@ impl<'gc> Loader<'gc> {
 
                 match dialog_result {
                     Ok(dialog_result) => {
-
                         match dialog_result {
                             FileDialogResult::Selection(selection) => {
-
-                                //TODO: iterator?
                                 let mut values = Vec::with_capacity(selection.file_count().into());
                                 for ii in 0..(selection.file_count().into()){
                                     let file = selection.file(ii).unwrap();
@@ -1640,14 +1635,13 @@ impl<'gc> Loader<'gc> {
                                     values.push(fr.into());
                                 }
 
-                                let array: Value<'_> = ArrayObject::new(
+                                let array = ArrayObject::new(
                                     activation.context.gc_context,
                                     activation.context.avm1.prototypes().array,
                                     values,
-                                ).into();
+                                );
 
-                                target_object.set_local("fileList".into(), array, &mut activation, target_object);
-
+                                target_object.set("fileList", array.into(), &mut activation)?;
 
                                 as_broadcaster::broadcast_internal(
                                     &mut activation,
@@ -1657,6 +1651,9 @@ impl<'gc> Loader<'gc> {
                                 )?;
                             }
                             FileDialogResult::Canceled => {
+                                let array = ArrayObject::empty(&activation);
+                                target_object.set("fileList", array.into(), &mut activation)?;
+
                                 as_broadcaster::broadcast_internal(
                                     &mut activation,
                                     target_object,

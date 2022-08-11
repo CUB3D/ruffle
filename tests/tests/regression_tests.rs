@@ -562,6 +562,8 @@ swf_tests! {
     (file_reference_upload_success, "avm1/file_reference_upload_success", 1),
     (file_reference_upload_httperror_dns_error, "avm1/file_reference_upload_httperror_dns_error", 1),
     (file_reference_upload_httperror_status_code, "avm1/file_reference_upload_httperror_status_code", 1),
+    (file_reference_list_browse_success, "avm1/file_reference_list_browse_success", 1),
+    (file_reference_list_browse_cancel, "avm1/file_reference_list_browse_cancel", 1),
     (displacement_map_filter, "avm1/displacement_map_filter", 1),
     (divide_swf4, "avm1/divide_swf4", 1),
     (do_init_action, "avm1/do_init_action", 3),

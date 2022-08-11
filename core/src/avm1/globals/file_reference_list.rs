@@ -3,28 +3,21 @@ use crate::avm1::error::Error;
 use crate::avm1::globals::as_broadcaster::BroadcasterFunctions;
 use crate::avm1::object::file_reference::FileReferenceObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
-use crate::avm1::{Object, TObject, Value};
+use crate::avm1::{ArrayObject, Object, TObject, Value};
 use crate::backend::ui::FileFilter;
 use gc_arena::MutationContext;
-
-//TODO:
-// There are two undocumented functions in FileReference: convertToPPT and deleteConvertedPPT.
-// Until further reason is given, they will be unimplemented.
-// See:
-// ASSetPropFlags(flash.net.FileReference.prototype, null, 6, 1);
-// for(var k in flash.net.FileReference.prototype) {
-// 	trace(k);
-// }
 
 const PROTO_DECLS: &[Declaration] = declare_properties! {
     "browse" => method(browse; DONT_ENUM);
 };
 
 pub fn constructor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+    activation: &mut Activation<'_, 'gc, '_>,
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let filelist = ArrayObject::empty(activation);
+    this.set("fileList", filelist.into(), activation)?;
     Ok(this.into())
 }
 

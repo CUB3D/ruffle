@@ -1,19 +1,42 @@
+use std::num::NonZeroUsize;
 use chrono::{DateTime, Utc};
 use image::EncodableLayout;
-use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
-};
+use ruffle_core::backend::ui::{DialogResultFuture, Error, FileDialogResult, FileDialogSelection, FileFilter, FileSelection, LoaderError, MouseCursor, UiBackend};
 
 /// A simulated file dialog response, for use in tests
 ///
 /// Currently this can only simulate either a user cancellation result, or a successful file selection
 #[derive(Default)]
-pub struct TestFileDialogResult {
+pub struct TestFileSelection {
+    files: Vec<TestFile>,
+}
+
+impl FileDialogSelection for TestFileSelection {
+    fn refresh(&mut self) {
+        self.files.iter_mut().for_each(|f| f.refresh());
+    }
+
+    fn file_count(&self) -> NonZeroUsize {
+        self.files.len().try_into().unwrap()
+    }
+
+    fn file(&self, id: usize) -> Option<&dyn FileSelection> {
+        let file: &dyn FileSelection = self.files.get(id)?;
+        Some(file)
+    }
+
+    fn file_mut(&mut self, id: usize) -> Option<&mut dyn FileSelection> {
+        let file: &mut dyn FileSelection = self.files.get_mut(id)?;
+        Some(file)
+    }
+}
+
+struct TestFile {
     canceled: bool,
     file_name: Option<String>,
 }
 
-impl TestFileDialogResult {
+impl TestFile {
     fn new_canceled() -> Self {
         Self {
             canceled: true,
@@ -29,11 +52,7 @@ impl TestFileDialogResult {
     }
 }
 
-impl FileDialogResult for TestFileDialogResult {
-    fn is_cancelled(&self) -> bool {
-        self.canceled
-    }
-
+impl FileSelection for TestFile {
     fn creation_time(&self) -> Option<DateTime<Utc>> {
         None
     }
@@ -43,7 +62,7 @@ impl FileDialogResult for TestFileDialogResult {
     }
 
     fn file_name(&self) -> Option<String> {
-        (!self.is_cancelled()).then(|| self.file_name.clone().unwrap())
+        self.file_name.clone()
     }
 
     fn size(&self) -> Option<u64> {
@@ -51,7 +70,7 @@ impl FileDialogResult for TestFileDialogResult {
     }
 
     fn file_type(&self) -> Option<String> {
-        (!self.is_cancelled()).then(|| ".txt".to_string())
+        Some(".txt".to_string())
     }
 
     fn creator(&self) -> Option<String> {
@@ -98,22 +117,26 @@ impl UiBackend for TestUiBackend {
 
     fn message(&self, _message: &str) {}
 
-    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>, multiples_files: bool) -> Option<DialogResultFuture> {
         Some(Box::pin(async move {
             // If filters has the magic debug-select-success filter, then return a fake file for testing
 
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> = if filters
+            if filters
                 .iter()
                 .any(|f| f.description == "debug-select-success")
             {
-                Ok(Box::new(TestFileDialogResult::new_success(
-                    "test.txt".to_string(),
-                )))
-            } else {
-                Ok(Box::new(TestFileDialogResult::new_canceled()))
-            };
+                let files = if multiples_files {
+                    vec![TestFile::new_success("test.txt".to_string()), TestFile::new_success("test2.txt".to_string())]
+                } else {
+                    vec![TestFile::new_success("test.txt".to_string())]
+                };
 
-            result
+                Ok(FileDialogResult::Selection(Box::new(TestFileSelection {
+                    files,
+                })))
+            } else {
+                Ok(FileDialogResult::Canceled)
+            }
         }))
     }
 
@@ -124,15 +147,13 @@ impl UiBackend for TestUiBackend {
     ) -> Option<DialogResultFuture> {
         Some(Box::pin(async move {
             // If file_name has the magic debug-success.txt value, then return a fake file for testing
-
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> =
-                if file_name == "debug-success.txt" {
-                    Ok(Box::new(TestFileDialogResult::new_success(file_name)))
-                } else {
-                    Ok(Box::new(TestFileDialogResult::new_canceled()))
-                };
-
-            result
+            if file_name == "debug-success.txt" {
+                Ok(FileDialogResult::Selection(Box::new(TestFileSelection {
+                    files: vec![TestFile::new_success(file_name)]
+                })))
+            } else {
+                Ok(FileDialogResult::Canceled)
+            }
         }))
     }
 
