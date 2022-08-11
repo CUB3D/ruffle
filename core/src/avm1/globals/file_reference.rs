@@ -207,7 +207,7 @@ pub fn browse<'gc>(
         _ => return Ok(Value::Undefined),
     };
 
-    let dialog = activation.context.ui.display_file_open_dialog(file_filters);
+    let dialog = activation.context.ui.display_file_open_dialog(file_filters, false);
 
     let result = match dialog {
         Some(dialog) => {

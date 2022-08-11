@@ -2,7 +2,7 @@ use crate::add_field_accessors;
 use crate::avm1::activation::Activation;
 use crate::avm1::object::date_object::DateObject;
 use crate::avm1::{Object, ScriptObject, TObject};
-use crate::backend::ui::FileDialogResult;
+use crate::backend::ui::{FileDialogResult, FileSelection};
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::fmt;
@@ -116,7 +116,7 @@ impl<'gc> FileReferenceObject<'gc> {
     pub fn init_from_dialog_result(
         &self,
         activation: &mut Activation<'_, 'gc, '_>,
-        dialog_result: &dyn FileDialogResult,
+        dialog_result: &dyn FileSelection,
     ) {
         self.set_is_initialised(activation.context.gc_context, true);
 

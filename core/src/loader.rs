@@ -4,6 +4,7 @@ use crate::avm1::activation::{Activation, ActivationIdentifier};
 use crate::avm1::function::ExecutionReason;
 use crate::avm1::globals::as_broadcaster;
 use crate::avm1::{Avm1, Object, TObject, Value};
+use crate::avm1::object::array_object::ArrayObject;
 use crate::avm2::bytearray::ByteArrayStorage;
 use crate::avm2::names::Namespace;
 use crate::avm2::object::ByteArrayObject;
@@ -15,7 +16,7 @@ use crate::avm2::{
 };
 use crate::backend::navigator::{FetchError, OwnedFuture, Request};
 use crate::backend::render::{determine_jpeg_tag_format, JpegTagFormat};
-use crate::backend::ui::DialogResultFuture;
+use crate::backend::ui::{DialogResultFuture, FileDialogResult};
 use crate::context::{ActionQueue, ActionType, UpdateContext};
 use crate::display_object::{
     Bitmap, DisplayObject, TDisplayObject, TDisplayObjectContainer, TInteractiveObject,
@@ -28,12 +29,12 @@ use crate::vminterface::Instantiator;
 use encoding_rs::UTF_8;
 use gc_arena::{Collect, CollectionContext};
 use generational_arena::{Arena, Index};
-use std::borrow::Borrow;
 use std::fmt;
 use std::sync::{Arc, Mutex, Weak};
 use swf::read::read_compression_type;
 use thiserror::Error;
 use url::form_urlencoded;
+use crate::avm1::object::file_reference::{FileReferenceObject};
 
 pub type Handle = Index;
 
@@ -128,6 +129,9 @@ pub enum Error {
     #[error("Non-file upload loader spawned as file upload loader")]
     NotFileUploadLoader,
 
+    #[error("Non-multi-file dialog loader spawned as multi-file dialog loader")]
+    NotMultiFileDialogLoader,
+
     #[error("Could not fetch movie {0:?}")]
     FetchError(crate::backend::navigator::FetchError),
 
@@ -181,7 +185,8 @@ impl<'gc> LoadManager<'gc> {
             | Loader::LoadURLLoader { self_handle, .. }
             | Loader::FileDialog { self_handle, .. }
             | Loader::DownloadFileDialog { self_handle, .. }
-            | Loader::UploadFile { self_handle, .. } => *self_handle = Some(handle),
+            | Loader::UploadFile { self_handle, .. }
+            | Loader::MultiFileDialog { self_handle, ..} => *self_handle = Some(handle),
         }
         handle
     }
@@ -378,6 +383,28 @@ impl<'gc> LoadManager<'gc> {
 
         loader.file_upload_loader(player, url, data, file_name)
     }
+
+    /// Display a dialog allowing a user to select multiple files
+    ///
+    /// Returns a future that will be resolved when the files are selected
+    #[must_use]
+    pub fn select_multiple_file_dialog(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        target_object: Object<'gc>,
+        dialog: DialogResultFuture,
+    ) -> OwnedFuture<(), Error> {
+        let loader = Loader::MultiFileDialog {
+            self_handle: None,
+            target_object,
+        };
+        let handle = self.add_loader(loader);
+
+        let loader = self.get_loader_mut(handle).unwrap();
+        loader.introduce_loader_handle(handle);
+
+        loader.multi_file_dialog_loader(player, dialog)
+    }
 }
 
 impl<'gc> Default for LoadManager<'gc> {
@@ -493,6 +520,16 @@ pub enum Loader<'gc> {
         /// The target AVM1 object to select a file path from.
         target_object: Object<'gc>,
     },
+
+    /// Loader that is choosing multiple files from an AVM1 object scope.
+    MultiFileDialog {
+        /// The handle to refer to this loader instance.
+        #[collect(require_static)]
+        self_handle: Option<Handle>,
+
+        /// The target AVM1 object to select a set of file paths from.
+        target_object: Object<'gc>,
+    },
 }
 
 impl<'gc> Loader<'gc> {
@@ -510,6 +547,7 @@ impl<'gc> Loader<'gc> {
             Loader::LoadURLLoader { self_handle, .. } => *self_handle = Some(handle),
             Loader::DownloadFileDialog { self_handle, .. } => *self_handle = Some(handle),
             Loader::UploadFile { self_handle, .. } => *self_handle = Some(handle),
+            Loader::MultiFileDialog { self_handle, ..} => *self_handle = Some(handle),
         }
     }
 
@@ -1170,22 +1208,29 @@ impl<'gc> Loader<'gc> {
 
                 match dialog_result {
                     Ok(dialog_result) => {
-                        if !dialog_result.is_cancelled() {
-                            file_ref
-                                .init_from_dialog_result(&mut activation, dialog_result.borrow());
-                            as_broadcaster::broadcast_internal(
-                                &mut activation,
-                                target_object,
-                                &[target_object.into()],
-                                "onSelect".into(),
-                            )?;
-                        } else {
-                            as_broadcaster::broadcast_internal(
-                                &mut activation,
-                                target_object,
-                                &[target_object.into()],
-                                "onCancel".into(),
-                            )?;
+
+                        match dialog_result {
+                            FileDialogResult::Selection(selection) => {
+                                // File selections *must* have at least one file
+                                let file_selection = selection.first_file();
+
+                                file_ref
+                                    .init_from_dialog_result(&mut activation, file_selection);
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onSelect".into(),
+                                )?;
+                            }
+                            FileDialogResult::Canceled => {
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onCancel".into(),
+                                )?;
+                            }
                         }
                     }
                     Err(err) => {
@@ -1247,120 +1292,126 @@ impl<'gc> Loader<'gc> {
                 );
 
                 match dialog_result {
-                    Ok(mut dialog_result) => {
-                        if !dialog_result.is_cancelled() {
-                            // onSelect and onOpen should be called before the download begins
-                            // We simulate this by using the initial dialog result
-                            file_ref
-                                .init_from_dialog_result(&mut activation, dialog_result.borrow());
+                    Ok(dialog_result) => {
+                        match dialog_result {
+                            FileDialogResult::Selection(mut selection) => {
+                                // File selections *must* have at least one file
+                                let file_selection = selection.first_file_mut();
 
-                            as_broadcaster::broadcast_internal(
-                                &mut activation,
-                                target_object,
-                                &[target_object.into()],
-                                "onSelect".into(),
-                            )?;
+                                // onSelect and onOpen should be called before the download begins
+                                // We simulate this by using the initial dialog result
+                                file_ref
+                                    .init_from_dialog_result(&mut activation, file_selection);
 
-                            match download_res {
-                                Ok(download_res) => {
-                                    as_broadcaster::broadcast_internal(
-                                        &mut activation,
-                                        target_object,
-                                        &[target_object.into()],
-                                        "onOpen".into(),
-                                    )?;
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onSelect".into(),
+                                )?;
 
-                                    // onProgress and onComplete expect to receive the current state
-                                    // of the file, as we simulate an instant 100% download from the
-                                    // perspective of AS, we want to refresh the file_ref internal data
-                                    // before invoking the callbacks
+                                match download_res {
+                                    Ok(download_res) => {
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[target_object.into()],
+                                            "onOpen".into(),
+                                        )?;
 
-                                    dialog_result.write(&download_res.body);
-                                    dialog_result.refresh();
-                                    file_ref.init_from_dialog_result(
-                                        &mut activation,
-                                        dialog_result.borrow(),
-                                    );
+                                        // onProgress and onComplete expect to receive the current state
+                                        // of the file, as we simulate an instant 100% download from the
+                                        // perspective of AS, we want to refresh the file_ref internal data
+                                        // before invoking the callbacks
 
-                                    let total_bytes = download_res.body.len();
+                                        file_selection.write(&download_res.body);
+                                        file_selection.refresh();
+                                        file_ref.init_from_dialog_result(
+                                            &mut activation,
+                                            file_selection,
+                                        );
 
-                                    as_broadcaster::broadcast_internal(
-                                        &mut activation,
-                                        target_object,
-                                        &[
-                                            target_object.into(),
-                                            total_bytes.into(),
-                                            total_bytes.into(),
-                                        ],
-                                        "onProgress".into(),
-                                    )?;
+                                        let total_bytes = download_res.body.len();
 
-                                    as_broadcaster::broadcast_internal(
-                                        &mut activation,
-                                        target_object,
-                                        &[target_object.into()],
-                                        "onComplete".into(),
-                                    )?;
-                                }
-                                Err(err) => {
-                                    match err {
-                                        Error::FetchError(err) => {
-                                            // If the error happens before the connection is
-                                            // established, then don't invoke onOpen
-                                            if !matches!(err, FetchError::InvalidDomain) {
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[
+                                                target_object.into(),
+                                                total_bytes.into(),
+                                                total_bytes.into(),
+                                            ],
+                                            "onProgress".into(),
+                                        )?;
+
+                                        as_broadcaster::broadcast_internal(
+                                            &mut activation,
+                                            target_object,
+                                            &[target_object.into()],
+                                            "onComplete".into(),
+                                        )?;
+                                    }
+                                    Err(err) => {
+                                        match err {
+                                            Error::FetchError(err) => {
+                                                // If the error happens before the connection is
+                                                // established, then don't invoke onOpen
+                                                if !matches!(err, FetchError::InvalidDomain) {
+                                                    as_broadcaster::broadcast_internal(
+                                                        &mut activation,
+                                                        target_object,
+                                                        &[target_object.into()],
+                                                        "onOpen".into(),
+                                                    )?;
+                                                }
+
+                                                activation
+                                                    .context
+                                                    .avm_trace(&format!("Error opening URL '{}'", url));
+
                                                 as_broadcaster::broadcast_internal(
                                                     &mut activation,
                                                     target_object,
                                                     &[target_object.into()],
-                                                    "onOpen".into(),
+                                                    "onIOError".into(),
                                                 )?;
+
+                                                if let FetchError::UnsuccessfulStatusCode { body } = err
+                                                {
+                                                    let total_bytes = body.len();
+
+                                                    // Flash still executes the onProgress callback, even after an error
+                                                    // However it should only be called if the error occurred after the connection was established
+                                                    as_broadcaster::broadcast_internal(
+                                                        &mut activation,
+                                                        target_object,
+                                                        &[
+                                                            target_object.into(),
+                                                            total_bytes.into(),
+                                                            total_bytes.into(),
+                                                        ],
+                                                        "onProgress".into(),
+                                                    )?;
+                                                }
                                             }
-
-                                            activation
-                                                .context
-                                                .avm_trace(&format!("Error opening URL '{}'", url));
-
-                                            as_broadcaster::broadcast_internal(
-                                                &mut activation,
-                                                target_object,
-                                                &[target_object.into()],
-                                                "onIOError".into(),
-                                            )?;
-
-                                            if let FetchError::UnsuccessfulStatusCode { body } = err
-                                            {
-                                                let total_bytes = body.len();
-
-                                                // Flash still executes the onProgress callback, even after an error
-                                                // However it should only be called if the error occurred after the connection was established
-                                                as_broadcaster::broadcast_internal(
-                                                    &mut activation,
-                                                    target_object,
-                                                    &[
-                                                        target_object.into(),
-                                                        total_bytes.into(),
-                                                        total_bytes.into(),
-                                                    ],
-                                                    "onProgress".into(),
-                                                )?;
-                                            }
-                                        }
-                                        _ => {
-                                            log::warn!(
+                                            _ => {
+                                                log::warn!(
                                                 "Unhandled non-fetch error on download: {:?}",
                                                 err
                                             );
+                                            }
                                         }
                                     }
                                 }
                             }
-                        } else {
-                            as_broadcaster::broadcast_internal(
-                                &mut activation,
-                                target_object,
-                                &[target_object.into()],
-                                "onCancel".into(),
-                            )?;
+                            FileDialogResult::Canceled => {
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onCancel".into(),
+                                )?;
+                            }
                         }
                     }
                     Err(err) => {
@@ -1525,6 +1576,98 @@ impl<'gc> Loader<'gc> {
                                 log::warn!("Unhandled non-fetch error on upload: {:?}", err);
                             }
                         }
+                    }
+                }
+
+                Ok(())
+            })
+        })
+    }
+
+    /// Loader to process callbacks for a multi-file selection dialog
+    pub fn multi_file_dialog_loader(
+        &mut self,
+        player: Weak<Mutex<Player>>,
+        dialog: DialogResultFuture,
+    ) -> OwnedFuture<(), Error> {
+        let handle = match self {
+            Loader::MultiFileDialog { self_handle, .. } => {
+                self_handle.expect("Loader not self-introduced")
+            }
+            _ => return Box::pin(async { Err(Error::NotMultiFileDialogLoader) }),
+        };
+
+        let player = player
+            .upgrade()
+            .expect("Could not upgrade weak reference to player");
+
+        Box::pin(async move {
+            let dialog_result = dialog.await;
+
+            // Dialog is done, allow opening new dialogs
+            player.lock().unwrap().ui_mut().close_file_dialog();
+
+            // Fire the load handler.
+            player.lock().unwrap().update(|uc| -> Result<(), Error> {
+                let loader = uc.load_manager.get_loader(handle);
+                let target_object = match loader {
+                    Some(&Loader::MultiFileDialog { target_object, .. }) => target_object,
+                    None => return Err(Error::Cancelled),
+                    _ => return Err(Error::NotMultiFileDialogLoader),
+                };
+
+                let file_ref = target_object.as_file_reference_object().unwrap();
+
+                let mut activation = Activation::from_stub(
+                    uc.reborrow(),
+                    ActivationIdentifier::root("[File Dialog]"),
+                );
+
+                match dialog_result {
+                    Ok(dialog_result) => {
+
+                        match dialog_result {
+                            FileDialogResult::Selection(selection) => {
+
+                                //TODO: iterator?
+                                let mut values = Vec::with_capacity(selection.file_count().into());
+                                for ii in 0..(selection.file_count().into()){
+                                    let file = selection.file(ii).unwrap();
+
+                                    let fr = FileReferenceObject::empty_object(activation.context.gc_context, Some(activation.context.avm1.prototypes().file_reference));
+                                    fr.init_from_dialog_result(&mut activation, file);
+
+                                    values.push(fr.into());
+                                }
+
+                                let array: Value<'_> = ArrayObject::new(
+                                    activation.context.gc_context,
+                                    activation.context.avm1.prototypes().array,
+                                    values,
+                                ).into();
+
+                                target_object.set_local("fileList".into(), array, &mut activation, target_object);
+
+
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onSelect".into(),
+                                )?;
+                            }
+                            FileDialogResult::Canceled => {
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onCancel".into(),
+                                )?;
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!("Error on file dialog: {}", err);
                     }
                 }
 

@@ -62,6 +62,7 @@ mod transform;
 mod video;
 mod xml;
 mod xml_node;
+mod file_reference_list;
 
 const GLOBAL_DECLS: &[Declaration] = declare_properties! {
     "trace" => method(trace; DONT_ENUM);
@@ -527,6 +528,8 @@ pub struct SystemPrototypes<'gc> {
     pub video_constructor: Object<'gc>,
     pub file_reference: Object<'gc>,
     pub file_reference_constructor: Object<'gc>,
+    pub file_reference_list: Object<'gc>,
+    pub file_reference_list_constructor: Object<'gc>,
 }
 
 /// Initialize default global scope and builtins for an AVM1 instance.
@@ -949,7 +952,6 @@ pub fn create_globals<'gc>(
         array_proto,
         broadcaster_functions,
     );
-
     let file_reference_obj = FunctionObject::constructor(
         gc_context,
         Executable::Native(file_reference::constructor),
@@ -958,10 +960,32 @@ pub fn create_globals<'gc>(
         file_reference_proto,
     );
 
+    let file_reference_list_proto = file_reference_list::create_proto(
+        gc_context,
+        object_proto,
+        function_proto,
+        array_proto,
+        broadcaster_functions,
+    );
+    let file_reference_list_obj = FunctionObject::constructor(
+        gc_context,
+        Executable::Native(file_reference_list::constructor),
+        constructor_to_fn!(file_reference_list::constructor),
+        Some(function_proto),
+        file_reference_list_proto,
+    );
+
     net.define_value(
         gc_context,
         "FileReference",
         file_reference_obj.into(),
+        Attribute::DONT_ENUM,
+    );
+
+    net.define_value(
+        gc_context,
+        "FileReferenceList",
+        file_reference_list_obj.into(),
         Attribute::DONT_ENUM,
     );
 
@@ -1218,6 +1242,8 @@ pub fn create_globals<'gc>(
             video_constructor: video,
             file_reference: file_reference_proto,
             file_reference_constructor: file_reference_obj,
+            file_reference_list: file_reference_list_proto,
+            file_reference_list_constructor: file_reference_list_obj,
         },
         globals.into(),
         broadcaster_functions,

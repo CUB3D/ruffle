@@ -2,28 +2,62 @@ use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
+    DialogResultFuture, Error, FileDialogResult, FileDialogSelection, FileFilter, FileSelection,
+    LoaderError, MouseCursor, UiBackend,
 };
 use std::fs;
+use std::num::{NonZeroU8, NonZeroUsize};
 use std::rc::Rc;
 use winit::window::Fullscreen;
 use winit::window::Window;
 
-pub struct DesktopFileDialogResult {
-    handle: Option<FileHandle>,
+pub struct DesktopFileSelection {
+    files: Vec<DesktopFile>,
+}
+
+impl DesktopFileSelection {
+    pub fn new(files: Vec<FileHandle>) -> Self {
+        DesktopFileSelection {
+            files: files.into_iter().map(|f| DesktopFile::new(f)).collect(),
+        }
+    }
+}
+
+impl FileDialogSelection for DesktopFileSelection {
+    fn refresh(&mut self) {
+        self.files.iter_mut().for_each(|f| f.refresh());
+    }
+
+    fn file_count(&self) -> NonZeroUsize {
+        self.files
+            .len()
+            .try_into()
+            .expect("Files must have at least one entry")
+    }
+
+    fn file(&self, id: usize) -> Option<&dyn FileSelection> {
+        let x: &dyn FileSelection = self.files.get(id)?;
+        Some(x)
+    }
+
+    fn file_mut(&mut self, id: usize) -> Option<&mut dyn FileSelection> {
+        let x: &mut dyn FileSelection = self.files.get_mut(id)?;
+        Some(x)
+    }
+}
+
+pub struct DesktopFile {
+    handle: FileHandle,
     md: Option<fs::Metadata>,
     contents: Vec<u8>,
 }
 
-impl DesktopFileDialogResult {
-    /// Create a new [`DesktopFileDialogResult`] from a given file handle
-    pub fn new(handle: Option<FileHandle>) -> Self {
-        let md = handle.as_ref().and_then(|x| fs::metadata(x.path()).ok());
+impl DesktopFile {
+    /// Create a new [`DesktopFile`] from a given file handle
+    pub fn new(handle: FileHandle) -> Self {
+        let md = fs::metadata(handle.path()).ok();
 
-        let contents = handle
-            .as_ref()
-            .and_then(|handle| fs::read(handle.path()).ok())
-            .unwrap_or_default();
+        let contents = fs::read(handle.path()).unwrap_or_default();
 
         Self {
             handle,
@@ -33,11 +67,7 @@ impl DesktopFileDialogResult {
     }
 }
 
-impl FileDialogResult for DesktopFileDialogResult {
-    fn is_cancelled(&self) -> bool {
-        self.handle.is_none()
-    }
-
+impl FileSelection for DesktopFile {
     fn creation_time(&self) -> Option<DateTime<Utc>> {
         if let Some(md) = &self.md {
             md.created().ok().map(DateTime::<Utc>::from)
@@ -55,7 +85,7 @@ impl FileDialogResult for DesktopFileDialogResult {
     }
 
     fn file_name(&self) -> Option<String> {
-        self.handle.as_ref().map(|handle| handle.file_name())
+        Some(self.handle.file_name())
     }
 
     fn size(&self) -> Option<u64> {
@@ -63,15 +93,11 @@ impl FileDialogResult for DesktopFileDialogResult {
     }
 
     fn file_type(&self) -> Option<String> {
-        if let Some(handle) = &self.handle {
-            handle
-                .path()
-                .extension()
-                .and_then(|x| x.to_str())
-                .map(|x| ".".to_owned() + x)
-        } else {
-            None
-        }
+        self.handle
+            .path()
+            .extension()
+            .and_then(|x| x.to_str())
+            .map(|x| ".".to_owned() + x)
     }
 
     fn creator(&self) -> Option<String> {
@@ -83,25 +109,12 @@ impl FileDialogResult for DesktopFileDialogResult {
     }
 
     fn write(&self, data: &[u8]) {
-        if let Some(handle) = &self.handle {
-            let _ = fs::write(handle.path(), data);
-        }
+        let _ = fs::write(self.handle.path(), data);
     }
 
     fn refresh(&mut self) {
-        let md = self
-            .handle
-            .as_ref()
-            .and_then(|x| fs::metadata(x.path()).ok());
-
-        let contents = if let Some(handle) = &self.handle {
-            fs::read(handle.path()).unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-
-        self.md = md;
-        self.contents = contents;
+        self.contents = fs::read(self.handle.path()).unwrap_or_default();
+        self.md = fs::metadata(self.handle.path()).ok()
     }
 }
 
@@ -195,7 +208,11 @@ impl UiBackend for DesktopUiBackend {
         dialog.show();
     }
 
-    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture> {
+    fn display_file_open_dialog(
+        &mut self,
+        filters: Vec<FileFilter>,
+        multiple_files: bool,
+    ) -> Option<DialogResultFuture> {
         // Prevent opening multiple dialogs at the same time
         if self.dialog_open {
             return None;
@@ -221,10 +238,25 @@ impl UiBackend for DesktopUiBackend {
                 }
             }
 
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
-                DesktopFileDialogResult::new(dialog.pick_file().await),
-            ));
-            result
+            let result = if multiple_files {
+                let files = dialog.pick_files().await;
+
+                if let Some(files) = files {
+                    FileDialogResult::Selection(Box::new(DesktopFileSelection::new(files)))
+                } else {
+                    FileDialogResult::Canceled
+                }
+            } else {
+                let file = dialog.pick_file().await;
+
+                if let Some(file) = file {
+                    FileDialogResult::Selection(Box::new(DesktopFileSelection::new(vec![file])))
+                } else {
+                    FileDialogResult::Canceled
+                }
+            };
+
+            Ok(result)
         }))
     }
 
@@ -246,10 +278,13 @@ impl UiBackend for DesktopUiBackend {
                 .set_title(&title)
                 .set_file_name(&file_name);
 
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> = Ok(Box::new(
-                DesktopFileDialogResult::new(dialog.save_file().await),
-            ));
-            result
+            let result = if let Some(file) = dialog.save_file().await {
+                FileDialogResult::Selection(Box::new(DesktopFileSelection::new(vec![file])))
+            } else {
+                FileDialogResult::Canceled
+            };
+
+            Ok(result)
         }))
     }
 

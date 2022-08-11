@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use downcast_rs::Downcast;
 use std::collections::HashSet;
 use std::future::Future;
+use std::num::{NonZeroU8, NonZeroUsize};
 use std::pin::Pin;
 
 /// Type alias for pinned, boxed, and owned futures that output a falliable
@@ -23,10 +24,34 @@ pub struct FileFilter {
     pub mac_type: Option<String>,
 }
 
+pub enum FileDialogResult {
+    Selection(Box<dyn FileDialogSelection>),
+    Canceled,
+}
+
 /// A result of a file selection
-pub trait FileDialogResult: Downcast {
-    /// Was the file selection canceled by the user
-    fn is_cancelled(&self) -> bool;
+pub trait FileDialogSelection: Downcast {
+    /// Refresh any internal metadata, any future calls to other functions (such as [FileDialogResult::size]) will reflect
+    /// the state at the time of the last refresh
+    fn refresh(&mut self);
+    /// Get the number of files in this selection
+    fn file_count(&self) -> NonZeroUsize;
+    fn file(&self, id: usize) -> Option<&dyn FileSelection>;
+    fn file_mut(&mut self, id: usize) -> Option<&mut dyn FileSelection>;
+
+    /// Get the first file in the selection, as it always exists
+    fn first_file(&self) -> &dyn FileSelection {
+        self.file(0).expect("File selection must have at least one file")
+    }
+
+    /// Get a mutable reference to the first file in the selection, as it always exists
+    fn first_file_mut(&mut self) -> &mut dyn FileSelection {
+        self.file_mut(0).expect("File selection must have at least one file")
+    }
+}
+impl_downcast!(FileDialogSelection);
+
+pub trait FileSelection: Downcast {
     fn creation_time(&self) -> Option<DateTime<Utc>>;
     fn modification_time(&self) -> Option<DateTime<Utc>>;
     fn file_name(&self) -> Option<String>;
@@ -42,10 +67,11 @@ pub trait FileDialogResult: Downcast {
     /// the state at the time of the last refresh
     fn refresh(&mut self);
 }
-impl_downcast!(FileDialogResult);
+impl_downcast!(FileSelection);
+
 
 /// Future representing a file selection in process
-pub type DialogResultFuture = OwnedFuture<Box<dyn FileDialogResult>, LoaderError>;
+pub type DialogResultFuture = OwnedFuture<FileDialogResult, LoaderError>;
 
 pub type Error = Box<dyn std::error::Error>;
 
@@ -77,7 +103,12 @@ pub trait UiBackend {
     /// Displays a file selection dialog, returning None if the dialog cannot be displayed
     /// (e.g because it is already open)
     /// * `filters` represents a list of filters to the possible file types that can be selected
-    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>) -> Option<DialogResultFuture>;
+    /// * `multiple_files` is true if the selection should allow selecting multiple files
+    ///
+    /// # Returns
+    /// * `None` If the dialog cannot be displayed
+    /// * If the dialog is displayed, then the returned [`Vec`], should contain at least one item
+    fn display_file_open_dialog(&mut self, filters: Vec<FileFilter>, multiple_files: bool) -> Option<DialogResultFuture>;
 
     /// Display a dialog allowing a user to select a destination to save a file to
     ///
@@ -215,11 +246,10 @@ impl UiBackend for NullUiBackend {
     fn display_file_open_dialog(
         &mut self,
         _filters: Vec<FileFilter>,
+        _multiple_files: bool,
     ) -> Option<DialogResultFuture> {
         Some(Box::pin(async move {
-            let result: Result<Box<dyn FileDialogResult>, LoaderError> =
-                Ok(Box::new(NullFileDialogResult::new()));
-            result
+            Ok(FileDialogResult::Canceled)
         }))
     }
 
@@ -238,50 +268,4 @@ impl Default for NullUiBackend {
     fn default() -> Self {
         NullUiBackend::new()
     }
-}
-
-pub struct NullFileDialogResult {}
-
-impl NullFileDialogResult {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for NullFileDialogResult {
-    fn default() -> Self {
-        NullFileDialogResult::new()
-    }
-}
-
-impl FileDialogResult for NullFileDialogResult {
-    fn is_cancelled(&self) -> bool {
-        true
-    }
-
-    fn creation_time(&self) -> Option<DateTime<Utc>> {
-        None
-    }
-    fn modification_time(&self) -> Option<DateTime<Utc>> {
-        None
-    }
-    fn file_name(&self) -> Option<String> {
-        None
-    }
-    fn size(&self) -> Option<u64> {
-        None
-    }
-    fn file_type(&self) -> Option<String> {
-        None
-    }
-    fn creator(&self) -> Option<String> {
-        None
-    }
-
-    fn contents(&self) -> &[u8] {
-        &[]
-    }
-
-    fn write(&self, _data: &[u8]) {}
-    fn refresh(&mut self) {}
 }
