@@ -24,13 +24,17 @@ pub struct FileFilter {
     pub mac_type: Option<String>,
 }
 
+/// A result for a file selection
 pub enum FileDialogResult {
-    Selection(Box<dyn FileDialogSelection>),
+    /// The selection was successful
+    Selection(Box<dyn FileSelectionGroup>),
+
+    /// The selection was canceled
     Canceled,
 }
 
-/// A result of a file selection
-pub trait FileDialogSelection: Downcast {
+/// Defines a collection of selected files, which must contain at least one file
+pub trait FileSelectionGroup: Downcast {
     /// Refresh any internal metadata, any future calls to other functions (such as [FileDialogResult::size]) will reflect
     /// the state at the time of the last refresh
     fn refresh(&mut self);
@@ -49,8 +53,9 @@ pub trait FileDialogSelection: Downcast {
         self.file_mut(0).expect("File selection must have at least one file")
     }
 }
-impl_downcast!(FileDialogSelection);
+impl_downcast!(FileSelectionGroup);
 
+/// Defines a single file selected from a dialog
 pub trait FileSelection: Downcast {
     fn creation_time(&self) -> Option<DateTime<Utc>>;
     fn modification_time(&self) -> Option<DateTime<Utc>>;

@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use chrono::{DateTime, Utc};
 use image::EncodableLayout;
-use ruffle_core::backend::ui::{DialogResultFuture, Error, FileDialogResult, FileDialogSelection, FileFilter, FileSelection, LoaderError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::{DialogResultFuture, Error, FileDialogResult, FileSelectionGroup, FileFilter, FileSelection, LoaderError, MouseCursor, UiBackend};
 
 /// A simulated file dialog response, for use in tests
 ///
@@ -11,7 +11,7 @@ pub struct TestFileSelection {
     files: Vec<TestFile>,
 }
 
-impl FileDialogSelection for TestFileSelection {
+impl FileSelectionGroup for TestFileSelection {
     fn refresh(&mut self) {
         self.files.iter_mut().for_each(|f| f.refresh());
     }

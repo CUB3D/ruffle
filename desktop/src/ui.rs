@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileDialogSelection, FileFilter, FileSelection,
+    DialogResultFuture, Error, FileDialogResult, FileSelectionGroup, FileFilter, FileSelection,
     LoaderError, MouseCursor, UiBackend,
 };
 use std::fs;
@@ -23,7 +23,7 @@ impl DesktopFileSelection {
     }
 }
 
-impl FileDialogSelection for DesktopFileSelection {
+impl FileSelectionGroup for DesktopFileSelection {
     fn refresh(&mut self) {
         self.files.iter_mut().for_each(|f| f.refresh());
     }
