@@ -1,7 +1,7 @@
 use super::JavascriptPlayer;
 use rfd::{AsyncFileDialog, FileHandle};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, FileSelection, ListFileSelectionGroup,
+    DialogResultFuture, Error, FileDialogResult, FileFilter, FileSelection, FileSelectionGroup,
     MouseCursor, UiBackend,
 };
 use ruffle_web_common::JsResult;
@@ -232,7 +232,7 @@ impl UiBackend for WebUiBackend {
                         out.push(x);
                     }
 
-                    FileDialogResult::Selection(ListFileSelectionGroup::new(out))
+                    FileDialogResult::Selection(FileSelectionGroup::new(out))
                 } else {
                     FileDialogResult::Canceled
                 }
@@ -240,7 +240,7 @@ impl UiBackend for WebUiBackend {
                 let file = dialog.pick_file().await;
 
                 if let Some(file) = file {
-                    FileDialogResult::Selection(ListFileSelectionGroup::new(vec![Box::new(
+                    FileDialogResult::Selection(FileSelectionGroup::new(vec![Box::new(
                         WebFileSelection::new(file).await,
                     )]))
                 } else {

@@ -27,18 +27,18 @@ pub struct FileFilter {
 /// A result for a file selection
 pub enum FileDialogResult {
     /// The selection was successful
-    Selection(ListFileSelectionGroup),
+    Selection(FileSelectionGroup),
 
     /// The selection was canceled
     Canceled,
 }
 
 /// Defines a group of selected files, which must contain at least one file
-pub struct ListFileSelectionGroup {
+pub struct FileSelectionGroup {
     files: Vec<Box<dyn FileSelection>>,
 }
 
-impl ListFileSelectionGroup {
+impl FileSelectionGroup {
     pub fn new(files: Vec<Box<dyn FileSelection>>) -> Self {
         assert!(
             !files.is_empty(),

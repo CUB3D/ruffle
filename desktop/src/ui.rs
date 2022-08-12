@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use rfd::{AsyncFileDialog, FileHandle, MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, FileSelection, ListFileSelectionGroup,
+    DialogResultFuture, Error, FileDialogResult, FileFilter, FileSelection, FileSelectionGroup,
     MouseCursor, UiBackend,
 };
 use std::fs;
@@ -213,7 +213,7 @@ impl UiBackend for DesktopUiBackend {
                             x
                         })
                         .collect::<Vec<_>>();
-                    FileDialogResult::Selection(ListFileSelectionGroup::new(files))
+                    FileDialogResult::Selection(FileSelectionGroup::new(files))
                 } else {
                     FileDialogResult::Canceled
                 }
@@ -221,7 +221,7 @@ impl UiBackend for DesktopUiBackend {
                 let file = dialog.pick_file().await;
 
                 if let Some(file) = file {
-                    FileDialogResult::Selection(ListFileSelectionGroup::new(vec![Box::new(
+                    FileDialogResult::Selection(FileSelectionGroup::new(vec![Box::new(
                         DesktopFile::new(file),
                     )]))
                 } else {
@@ -252,7 +252,7 @@ impl UiBackend for DesktopUiBackend {
                 .set_file_name(&file_name);
 
             let result = if let Some(file) = dialog.save_file().await {
-                FileDialogResult::Selection(ListFileSelectionGroup::new(vec![Box::new(
+                FileDialogResult::Selection(FileSelectionGroup::new(vec![Box::new(
                     DesktopFile::new(file),
                 )]))
             } else {
