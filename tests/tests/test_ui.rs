@@ -104,9 +104,7 @@ impl UiBackend for TestUiBackend {
                     vec![Box::new(TestFile::new_success("test.txt".to_string()))]
                 };
 
-                Ok(FileDialogResult::Selection(FileSelectionGroup::new(
-                    files,
-                )))
+                Ok(FileDialogResult::Selection(FileSelectionGroup::new(files)))
             } else {
                 Ok(FileDialogResult::Canceled)
             }
@@ -121,9 +119,9 @@ impl UiBackend for TestUiBackend {
         Some(Box::pin(async move {
             // If file_name has the magic debug-success.txt value, then return a fake file for testing
             if file_name == "debug-success.txt" {
-                Ok(FileDialogResult::Selection(FileSelectionGroup::new(
-                    vec![Box::new(TestFile::new_success(file_name))],
-                )))
+                Ok(FileDialogResult::Selection(FileSelectionGroup::new(vec![
+                    Box::new(TestFile::new_success(file_name)),
+                ])))
             } else {
                 Ok(FileDialogResult::Canceled)
             }
