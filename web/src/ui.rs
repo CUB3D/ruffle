@@ -89,7 +89,7 @@ impl FileSelection for WebFileSelection {
 
     #[cfg(target_arch = "wasm32")]
     fn size(&self) -> Option<u64> {
-        self.handle.inner().size() as u64
+        Some(self.handle.inner().size() as u64)
     }
 
     fn file_type(&self) -> Option<String> {
