@@ -208,7 +208,7 @@ impl UiBackend for DesktopUiBackend {
             let mut dialog = AsyncFileDialog::new();
 
             for filter in filters {
-                if std::env::consts::OS == "macos" && filter.mac_type.is_some() {
+                if cfg!(target_os = "macos") && filter.mac_type.is_some() {
                     let mac_type = filter.mac_type.unwrap();
                     let extensions: Vec<&str> = mac_type.split(';').collect();
                     dialog = dialog.add_filter(&filter.description, &extensions);

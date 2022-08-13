@@ -6,10 +6,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
-
-/// Type alias for pinned, boxed, and owned futures that output a falliable
-/// result of type `Result<T, E>`.
-pub type OwnedFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + 'static>>;
+use crate::backend::navigator::OwnedFuture;
 
 /// A filter specifying a category that can be selected from a file chooser dialog
 pub struct FileFilter {
