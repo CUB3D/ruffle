@@ -221,7 +221,11 @@ impl UiBackend for WebUiBackend {
             let mut dialog = AsyncFileDialog::new();
 
             for filter in filters {
-                if std::env::consts::OS == "macos" && filter.mac_type.is_some() {
+                let window = web_sys::window().expect("window()");
+                let navigator = window.navigator();
+                let platform = navigator.platform().expect("navigator.platform");
+
+                if platform.contains("Mac") && filter.mac_type.is_some() {
                     let mac_type = filter.mac_type.unwrap();
                     let extensions: Vec<&str> = mac_type.split(';').collect();
                     dialog = dialog.add_filter(&filter.description, &extensions);
