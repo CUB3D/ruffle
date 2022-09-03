@@ -3177,7 +3177,7 @@ dependencies = [
  "futures",
  "image",
  "log",
- "raw-window-handle 0.4.3",
+ "raw-window-handle 0.5.0",
  "ruffle_render",
  "swf",
  "web-sys",
