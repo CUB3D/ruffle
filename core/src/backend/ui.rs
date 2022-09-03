@@ -1,12 +1,10 @@
+use crate::backend::navigator::OwnedFuture;
 use crate::events::{KeyCode, PlayerEvent};
 pub use crate::loader::Error as LoaderError;
 use chrono::{DateTime, Utc};
 use downcast_rs::Downcast;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::future::Future;
-use std::pin::Pin;
-use crate::backend::navigator::OwnedFuture;
 
 /// A filter specifying a category that can be selected from a file chooser dialog
 pub struct FileFilter {

@@ -940,7 +940,7 @@ pub fn create_globals<'gc>(
         Attribute::empty(),
     );
 
-    flash.define_value(gc_context, "net", net.into(), Attribute::DONT_ENUM);
+    flash.define_value(gc_context, "net", net.into(), Attribute::empty());
 
     let file_reference_proto = file_reference::create_proto(
         gc_context,
@@ -962,7 +962,7 @@ pub fn create_globals<'gc>(
         gc_context,
         "FileReference",
         file_reference_obj.into(),
-        Attribute::DONT_ENUM,
+        Attribute::empty(),
     );
 
     let globals = ScriptObject::new(gc_context, None);

@@ -19,13 +19,13 @@ use url::Url;
 // }
 
 const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "creationDate" => property(creation_date);
-    "creator" => property(creator);
-    "modificationDate" => property(modification_date);
-    "name" => property(name);
-    "postData" => property(post_data, set_post_data);
-    "size" => property(size);
-    "type" => property(file_type);
+    "creationDate" => property(creation_date; DONT_ENUM);
+    "creator" => property(creator; DONT_ENUM);
+    "modificationDate" => property(modification_date; DONT_ENUM);
+    "name" => property(name; DONT_ENUM);
+    "postData" => property(post_data, set_post_data; DONT_ENUM);
+    "size" => property(size; DONT_ENUM);
+    "type" => property(file_type; DONT_ENUM);
     "browse" => method(browse; DONT_ENUM);
     "cancel" => method(cancel; DONT_ENUM);
     "download" => method(download; DONT_ENUM);
@@ -170,32 +170,34 @@ pub fn browse<'gc>(
 
             for i in 0..length {
                 if let Value::Object(element) = array.get_element(activation, i) {
-                    let mac_type = if let Ok(val) = element.get("macType", activation) {
-                        Some(val.coerce_to_string(activation)?.to_string())
+                    let mac_type =
+                        if let Some(val) = element.get_local_stored("macType", activation) {
+                            Some(val.coerce_to_string(activation)?.to_string())
+                        } else {
+                            None
+                        };
+
+                    let description = element.get_local_stored("description", activation);
+                    let extension = element.get_local_stored("extension", activation);
+
+                    if let (Some(description), Some(extension)) = (description, extension) {
+                        let description = description.coerce_to_string(activation)?.to_string();
+
+                        let extensions = extension.coerce_to_string(activation)?.to_string();
+
+                        // Empty strings are not allowed for desc / extension
+                        if description.is_empty() || extensions.is_empty() {
+                            return Ok(false.into());
+                        }
+
+                        results.push(FileFilter {
+                            description,
+                            extensions,
+                            mac_type,
+                        });
                     } else {
-                        None
-                    };
-
-                    let description = element
-                        .get("description", activation)?
-                        .coerce_to_string(activation)?
-                        .to_string();
-
-                    let extensions = element
-                        .get("extension", activation)?
-                        .coerce_to_string(activation)?
-                        .to_string();
-
-                    // Empty strings are not allowed for desc / extension
-                    if description.is_empty() || extensions.is_empty() {
                         return Ok(false.into());
                     }
-
-                    results.push(FileFilter {
-                        description,
-                        extensions,
-                        mac_type,
-                    });
                 } else {
                     return Err(Error::ThrownValue("Unexpected filter value".into()));
                 }

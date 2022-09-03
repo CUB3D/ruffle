@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use image::EncodableLayout;
-use ruffle_core::backend::ui::{
-    DialogResultFuture, Error, FileDialogResult, FileFilter, LoaderError, MouseCursor, UiBackend,
-};
+use ruffle_core::backend::ui::{DialogResultFuture, FileDialogResult, FileFilter, FullscreenError, LoaderError, MouseCursor, UiBackend};
 
 /// A simulated file dialog response, for use in tests
 ///
@@ -88,7 +86,7 @@ impl UiBackend for TestUiBackend {
 
     fn set_clipboard_content(&mut self, _content: String) {}
 
-    fn set_fullscreen(&mut self, _is_full: bool) -> Result<(), Error> {
+    fn set_fullscreen(&mut self, _is_full: bool) -> Result<(), FullscreenError> {
         Ok(())
     }
 

@@ -15,9 +15,9 @@ use crate::avm2::{
     Activation as Avm2Activation, Avm2, Domain as Avm2Domain, Object as Avm2Object, QName,
     Value as Avm2Value,
 };
+use crate::backend::navigator::FetchError;
 use crate::backend::navigator::{OwnedFuture, Request};
 use crate::backend::ui::DialogResultFuture;
-use crate::backend::navigator::FetchError;
 use crate::context::{ActionQueue, ActionType, UpdateContext};
 use crate::display_object::{
     Bitmap, DisplayObject, TDisplayObject, TDisplayObjectContainer, TInteractiveObject,
