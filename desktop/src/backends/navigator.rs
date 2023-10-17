@@ -13,8 +13,9 @@ use isahc::{
 };
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use ruffle_core::backend::navigator::{
-    async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse, NavigationMethod,
-    NavigatorBackend, OpenURLMode, OwnedFuture, Request, SocketMode, SuccessResponse,
+    async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse, FetchError,
+    NavigationMethod, NavigatorBackend, OpenURLMode, OwnedFuture, Request, SocketMode,
+    SuccessResponse,
 };
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
@@ -238,7 +239,7 @@ impl NavigatorBackend for ExternalNavigatorBackend {
             _ => Box::pin(async move {
                 let client = client.ok_or_else(|| ErrorResponse {
                     url: processed_url.to_string(),
-                    error: Error::FetchError("Network unavailable".to_string()),
+                    error: Error::FetchError(FetchError::Other("Network unavailable".to_string())),
                 })?;
 
                 let mut isahc_request = match request.method() {
@@ -251,11 +252,11 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                         headers.insert(
                             HeaderName::from_str(name).map_err(|e| ErrorResponse {
                                 url: processed_url.to_string(),
-                                error: Error::FetchError(e.to_string()),
+                                error: Error::FetchError(FetchError::Other(e.to_string())),
                             })?,
                             HeaderValue::from_str(val).map_err(|e| ErrorResponse {
                                 url: processed_url.to_string(),
-                                error: Error::FetchError(e.to_string()),
+                                error: Error::FetchError(FetchError::Other(e.to_string())),
                             })?,
                         );
                     }
@@ -263,19 +264,19 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                         "Content-Type",
                         HeaderValue::from_str(&mime).map_err(|e| ErrorResponse {
                             url: processed_url.to_string(),
-                            error: Error::FetchError(e.to_string()),
+                            error: Error::FetchError(FetchError::Other(e.to_string())),
                         })?,
                     );
                 }
 
                 let body = isahc_request.body(body_data).map_err(|e| ErrorResponse {
                     url: processed_url.to_string(),
-                    error: Error::FetchError(e.to_string()),
+                    error: Error::FetchError(FetchError::Other(e.to_string())),
                 })?;
 
                 let mut response = client.send_async(body).await.map_err(|e| ErrorResponse {
                     url: processed_url.to_string(),
-                    error: Error::FetchError(e.to_string()),
+                    error: Error::FetchError(FetchError::Other(e.to_string())),
                 })?;
 
                 let url = if let Some(uri) = response.effective_uri() {
@@ -301,7 +302,7 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                     .await
                     .map_err(|e| ErrorResponse {
                         url: url.clone(),
-                        error: Error::FetchError(e.to_string()),
+                        error: Error::FetchError(FetchError::Other(e.to_string())),
                     })?;
 
                 Ok(SuccessResponse {
