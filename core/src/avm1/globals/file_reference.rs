@@ -11,6 +11,10 @@ use crate::string::AvmString;
 use gc_arena::{Collect, GcCell};
 use url::Url;
 
+//TODO: create dates in init_from_dialog_result
+//TODO: fix web
+
+
 // There are two undocumented functions in FileReference: convertToPPT and deleteConvertedPPT.
 // Until further reason is given, they will be unimplemented.
 // See:
@@ -31,6 +35,8 @@ impl<'gc> FileReferenceObject<'gc> {
     ) {
         let mut s = self.0.write(activation.gc());
         s.is_initialised = true;
+
+        let date_proto = activation.context.avm1.prototypes().date_constructor;
         // s.creation_date = Some(Object::)//
         s.file_type = dialog_result.file_type();
         // s.creation_date = Some(Object::)//

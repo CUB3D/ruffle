@@ -274,9 +274,15 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                     error: Error::FetchError(FetchError::Other(e.to_string())),
                 })?;
 
-                let mut response = client.send_async(body).await.map_err(|e| ErrorResponse {
-                    url: processed_url.to_string(),
-                    error: Error::FetchError(FetchError::Other(e.to_string())),
+                let mut response = client.send_async(body).await.map_err(|e| {
+                    let inner = match e.kind() {
+                        isahc::error::ErrorKind::NameResolution => FetchError::InvalidDomain,
+                        _ => FetchError::Other(e.to_string()),
+                    };
+                    ErrorResponse {
+                        url: processed_url.to_string(),
+                        error: Error::FetchError(inner),
+                    }
                 })?;
 
                 let url = if let Some(uri) = response.effective_uri() {
@@ -288,11 +294,16 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                 let status = response.status().as_u16();
                 let redirected = response.effective_uri().is_some();
                 if !response.status().is_success() {
-                    let error = Error::HttpNotOk(
-                        format!("HTTP status is not ok, got {}", response.status()),
-                        status,
-                        redirected,
-                    );
+                    warn!("HTTP status is not ok, got {}", response.status());
+                    let bytes = response
+                        .bytes()
+                        .await
+                        .map_err(|e| ErrorResponse { url: url.clone(), error: Error::FetchError(FetchError::Other(e.to_string()))})?;
+
+                    let error = Error::FetchError(FetchError::UnsuccessfulStatusCode {
+                        body: bytes,
+                    });
+
                     return Err(ErrorResponse { url, error });
                 }
 
