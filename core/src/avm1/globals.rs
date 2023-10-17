@@ -870,8 +870,13 @@ pub fn create_globals<'gc>(
 
     flash.define_value(gc_context, "net", net.into(), Attribute::empty());
 
-    let file_reference_obj =
-        file_reference::create_constructor(context, object_proto, function_proto);
+    let file_reference_obj = file_reference::create_constructor(
+        context,
+        object_proto,
+        function_proto,
+        array_proto,
+        broadcaster_functions,
+    );
 
     net.define_value(
         gc_context,

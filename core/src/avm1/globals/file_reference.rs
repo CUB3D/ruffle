@@ -1,6 +1,7 @@
 use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
 use crate::avm1::function::FunctionObject;
+use crate::avm1::globals::as_broadcaster::BroadcasterFunctions;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Executable, NativeObject, Object, ScriptObject, TObject, Value};
 use crate::avm_warn;
@@ -440,9 +441,12 @@ pub fn create_constructor<'gc>(
     context: &mut GcContext<'_, 'gc>,
     proto: Object<'gc>,
     fn_proto: Object<'gc>,
+    array_proto: Object<'gc>,
+    broadcaster_functions: BroadcasterFunctions<'gc>,
 ) -> Object<'gc> {
     let file_reference_proto = ScriptObject::new(context.gc_context, Some(proto));
     define_properties_on(PROTO_DECLS, context, file_reference_proto, fn_proto);
+    broadcaster_functions.initialize(context.gc_context, file_reference_proto.into(), array_proto);
     let constructor = FunctionObject::constructor(
         context.gc_context,
         Executable::Native(constructor),

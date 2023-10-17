@@ -3,6 +3,7 @@ use crate::util::image_trigger::ImageTrigger;
 use crate::util::navigator::TestNavigatorBackend;
 use crate::util::options::ImageComparison;
 use crate::util::test::Test;
+use crate::util::test_ui::TestUiBackend;
 use anyhow::{anyhow, Result};
 use ruffle_core::backend::audio::{
     swf, AudioBackend, AudioMixer, DecodeError, RegisterError, SoundHandle, SoundInstanceHandle,
@@ -118,6 +119,7 @@ pub fn run_swf(
         .with_navigator(navigator)
         .with_max_execution_duration(Duration::from_secs(300))
         .with_fs_commands(Box::new(fs_command_provider))
+        .with_ui(TestUiBackend::default())
         .with_viewport_dimensions(
             movie.width().to_pixels() as u32,
             movie.height().to_pixels() as u32,

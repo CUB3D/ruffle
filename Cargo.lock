@@ -4855,6 +4855,7 @@ dependencies = [
  "anyhow",
  "approx",
  "async-channel",
+ "chrono",
  "env_logger",
  "futures",
  "image",

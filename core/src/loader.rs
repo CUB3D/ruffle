@@ -2245,10 +2245,14 @@ impl<'gc> Loader<'gc> {
                     _ => return Err(Error::NotFileDialogLoader),
                 };
 
+                println!("File dialog handle 1");
+
                 let file_ref = match target_object.native() {
                     NativeObject::FileReference(fr) => fr,
                     _ => panic!("Shouldn't happen"),
                 };
+
+                println!("File dialog handle 2");
 
                 let mut activation = Activation::from_stub(
                     uc.reborrow(),
@@ -2269,6 +2273,8 @@ impl<'gc> Loader<'gc> {
                                 "onSelect".into(),
                             )?;
                         } else {
+                            println!("File dialog res = cancel");
+
                             as_broadcaster::broadcast_internal(
                                 &mut activation,
                                 target_object,
