@@ -11,7 +11,6 @@ use crate::string::AvmString;
 use gc_arena::{Collect, GcCell};
 use url::Url;
 
-//TODO: create dates in init_from_dialog_result
 //TODO: fix web
 
 
@@ -37,32 +36,24 @@ impl<'gc> FileReferenceObject<'gc> {
         s.is_initialised = true;
 
         let date_proto = activation.context.avm1.prototypes().date_constructor;
-        // s.creation_date = Some(Object::)//
+        if let Some(creation_time) = dialog_result.creation_time() {
+
+            if let Ok(Value::Object(obj)) = date_proto.construct(activation, &[(creation_time.timestamp_millis() as f64).into()]) {
+                s.creation_date = Some(obj);
+            }
+        }
+
+        if let Some(modification_time) = dialog_result.modification_time() {
+            if let Ok(Value::Object(obj)) = date_proto.construct(activation, &[(modification_time.timestamp_millis() as f64).into()]) {
+                s.modification_date = Some(obj);
+            }
+        }
+
         s.file_type = dialog_result.file_type();
-        // s.creation_date = Some(Object::)//
         s.name = dialog_result.file_name();
         s.size = dialog_result.size();
         s.creator = dialog_result.creator();
         s.data = dialog_result.contents().to_vec();
-
-        // self.set_creation_date(
-        //     activation.context.gc_context,
-        //     Some(DateObject::with_date_time(
-        //         activation.context.gc_context,
-        //         Some(activation.context.avm1.prototypes().date),
-        //         dialog_result.creation_time(),
-        //     )),
-        // );
-        //
-
-        // self.set_modification_date(
-        //     activation.context.gc_context,
-        //     Some(DateObject::with_date_time(
-        //         activation.context.gc_context,
-        //         Some(activation.context.avm1.prototypes().date),
-        //         dialog_result.modification_time(),
-        //     )),
-        // );
     }
 }
 
