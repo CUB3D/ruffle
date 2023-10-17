@@ -2,7 +2,7 @@ use crate::util::runner::TestLogBackend;
 use async_channel::Receiver;
 use ruffle_core::backend::log::LogBackend;
 use ruffle_core::backend::navigator::{
-    fetch_path, resolve_url_with_relative_base_path, ErrorResponse, FetchError, NavigationMethod,
+    fetch_path, resolve_url_with_relative_base_path, ErrorResponse, NavigationMethod,
     NavigatorBackend, NullExecutor, NullSpawner, OwnedFuture, Request, SuccessResponse,
 };
 use ruffle_core::indexmap::IndexMap;
@@ -85,9 +85,7 @@ impl NavigatorBackend for TestNavigatorBackend {
             return Box::pin(async move {
                 Err(ErrorResponse {
                     url: request.url().to_string(),
-                    error: Error::FetchError(FetchError::UnsuccessfulStatusCode {
-                        body: vec![0u8; 10],
-                    }),
+                    error: Error::HttpNotOk(request.url().to_string(), 0, false, 0),
                 })
             });
         }
@@ -96,7 +94,7 @@ impl NavigatorBackend for TestNavigatorBackend {
             return Box::pin(async move {
                 Err(ErrorResponse {
                     url: request.url().to_string(),
-                    error: Error::FetchError(FetchError::InvalidDomain),
+                    error: Error::InvalidDomain(request.url().to_string()),
                 })
             });
         }

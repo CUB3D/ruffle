@@ -11,9 +11,6 @@ use crate::string::AvmString;
 use gc_arena::{Collect, GcCell};
 use url::Url;
 
-//TODO: fix web
-
-
 // There are two undocumented functions in FileReference: convertToPPT and deleteConvertedPPT.
 // Until further reason is given, they will be unimplemented.
 // See:

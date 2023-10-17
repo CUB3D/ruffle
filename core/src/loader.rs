@@ -12,7 +12,6 @@ use crate::avm2::{
     Activation as Avm2Activation, Avm2, Domain as Avm2Domain, Object as Avm2Object,
     Value as Avm2Value,
 };
-use crate::backend::navigator::FetchError;
 use crate::backend::navigator::{OwnedFuture, Request};
 use crate::backend::ui::DialogResultFuture;
 use crate::bitmap::bitmap_data::Color;
@@ -160,7 +159,11 @@ pub enum Error {
     NotMovieUnloader,
 
     #[error("HTTP Status is not OK: {0} redirected: {1}")]
-    HttpNotOk(String, u16, bool),
+    HttpNotOk(String, u16, bool, u64),
+
+    /// The domain could not be resolved, either because it is invalid or a DNS error occurred
+    #[error("Domain resolution failure: {0}")]
+    InvalidDomain(String),
 
     #[error("Invalid SWF: {0}")]
     InvalidSwf(#[from] crate::tag_utils::Error),
@@ -184,7 +187,7 @@ pub enum Error {
     NotFileUploadLoader,
 
     #[error("Could not fetch: {0:?}")]
-    FetchError(crate::backend::navigator::FetchError),
+    FetchError(String),
 
     // TODO: We can't support lifetimes on this error object yet (or we'll need some backends inside
     // the GC arena). We're losing info here. How do we fix that?
@@ -911,7 +914,7 @@ impl<'gc> Loader<'gc> {
                         // FIXME - match Flash's error message
 
                         let (status_code, redirected) =
-                            if let Error::HttpNotOk(_, status_code, redirected) = response.error {
+                            if let Error::HttpNotOk(_, status_code, redirected, _) = response.error {
                                 (status_code, redirected)
                             } else {
                                 (0, false)
@@ -1118,7 +1121,7 @@ impl<'gc> Loader<'gc> {
                         // TODO: Log "Error opening URL" trace similar to the Flash Player?
 
                         let status_code =
-                            if let Error::HttpNotOk(_, status_code, _) = response.error {
+                            if let Error::HttpNotOk(_, status_code, _, _) = response.error {
                                 status_code
                             } else {
                                 0
@@ -1277,7 +1280,7 @@ impl<'gc> Loader<'gc> {
                         set_data(Vec::new(), &mut activation, target, data_format);
 
                         let (status_code, redirected) =
-                            if let Error::HttpNotOk(_, status_code, redirected) = response.error {
+                            if let Error::HttpNotOk(_, status_code, redirected, _) = response.error {
                                 (status_code, redirected)
                             } else {
                                 (0, false)
@@ -2403,17 +2406,27 @@ impl<'gc> Loader<'gc> {
                                 }
                                 Err(err) => {
                                     match err.error {
-                                        Error::FetchError(err) => {
+                                        Error::InvalidDomain(_) => {
+                                            activation
+                                                .context
+                                                .avm_trace(&format!("Error opening URL '{}'", url));
+
+                                            as_broadcaster::broadcast_internal(
+                                                &mut activation,
+                                                target_object,
+                                                &[target_object.into()],
+                                                "onIOError".into(),
+                                            )?;
+                                        }
+                                        Error::HttpNotOk(_, _, _, body_len) => {
                                             // If the error happens before the connection is
                                             // established, then don't invoke onOpen
-                                            if !matches!(err, FetchError::InvalidDomain) {
-                                                as_broadcaster::broadcast_internal(
-                                                    &mut activation,
-                                                    target_object,
-                                                    &[target_object.into()],
-                                                    "onOpen".into(),
-                                                )?;
-                                            }
+                                            as_broadcaster::broadcast_internal(
+                                                &mut activation,
+                                                target_object,
+                                                &[target_object.into()],
+                                                "onOpen".into(),
+                                            )?;
 
                                             activation
                                                 .context
@@ -2426,23 +2439,39 @@ impl<'gc> Loader<'gc> {
                                                 "onIOError".into(),
                                             )?;
 
-                                            if let FetchError::UnsuccessfulStatusCode { body } = err
-                                            {
-                                                let total_bytes = body.len();
+                                            // Flash still executes the onProgress callback, even after an error
+                                            // However it should only be called if the error occurred after the connection was established
+                                            as_broadcaster::broadcast_internal(
+                                                &mut activation,
+                                                target_object,
+                                                &[
+                                                    target_object.into(),
+                                                    body_len.into(),
+                                                    body_len.into(),
+                                                ],
+                                                "onProgress".into(),
+                                            )?;
+                                        }
+                                        Error::FetchError(_) => {
+                                            // If the error happens before the connection is
+                                            // established, then don't invoke onOpen
+                                            as_broadcaster::broadcast_internal(
+                                                &mut activation,
+                                                target_object,
+                                                &[target_object.into()],
+                                                "onOpen".into(),
+                                            )?;
 
-                                                // Flash still executes the onProgress callback, even after an error
-                                                // However it should only be called if the error occurred after the connection was established
-                                                as_broadcaster::broadcast_internal(
-                                                    &mut activation,
-                                                    target_object,
-                                                    &[
-                                                        target_object.into(),
-                                                        total_bytes.into(),
-                                                        total_bytes.into(),
-                                                    ],
-                                                    "onProgress".into(),
-                                                )?;
-                                            }
+                                            activation
+                                                .context
+                                                .avm_trace(&format!("Error opening URL '{}'", url));
+
+                                            as_broadcaster::broadcast_internal(
+                                                &mut activation,
+                                                target_object,
+                                                &[target_object.into()],
+                                                "onIOError".into(),
+                                            )?;
                                         }
                                         _ => {
                                             tracing::warn!(
@@ -2579,46 +2608,42 @@ impl<'gc> Loader<'gc> {
                         // then should call onHTTPError
 
                         match err.error {
-                            Error::FetchError(err) => {
-                                match err {
-                                    FetchError::InvalidDomain => {
-                                        as_broadcaster::broadcast_internal(
-                                            &mut activation,
-                                            target_object,
-                                            &[target_object.into()],
-                                            "onIOError".into(),
-                                        )?;
-                                    }
-                                    FetchError::UnsuccessfulStatusCode { .. } => {
-                                        as_broadcaster::broadcast_internal(
-                                            &mut activation,
-                                            target_object,
-                                            &[
-                                                target_object.into(),
-                                                total_size_bytes.into(),
-                                                total_size_bytes.into(),
-                                            ],
-                                            "onProgress".into(),
-                                        )?;
+                            Error::InvalidDomain(_) => {
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onIOError".into(),
+                                )?;
+                            }
+                            Error::HttpNotOk(_, _, _, _) => {
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[
+                                        target_object.into(),
+                                        total_size_bytes.into(),
+                                        total_size_bytes.into(),
+                                    ],
+                                    "onProgress".into(),
+                                )?;
 
-                                        as_broadcaster::broadcast_internal(
-                                            &mut activation,
-                                            target_object,
-                                            &[target_object.into()],
-                                            "onHTTPError".into(),
-                                        )?;
-                                    }
-                                    FetchError::Other(msg) => {
-                                        tracing::warn!("Unhandled fetch error: {:?}", msg);
-                                        // For now we will just handle this like a dns error
-                                        as_broadcaster::broadcast_internal(
-                                            &mut activation,
-                                            target_object,
-                                            &[target_object.into()],
-                                            "onIOError".into(),
-                                        )?;
-                                    }
-                                }
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onHTTPError".into(),
+                                )?;
+                            }
+                            Error::FetchError(msg) => {
+                                tracing::warn!("Unhandled fetch error: {:?}", msg);
+                                // For now we will just handle this like a dns error
+                                as_broadcaster::broadcast_internal(
+                                    &mut activation,
+                                    target_object,
+                                    &[target_object.into()],
+                                    "onIOError".into(),
+                                )?;
                             }
                             _ => {
                                 // We got something other than a FetchError from calling fetch, this should be unlikely

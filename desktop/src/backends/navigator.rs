@@ -13,7 +13,7 @@ use isahc::{
 };
 use rfd::{AsyncMessageDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use ruffle_core::backend::navigator::{
-    async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse, FetchError,
+    async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse,
     NavigationMethod, NavigatorBackend, OpenURLMode, OwnedFuture, Request, SocketMode,
     SuccessResponse,
 };
@@ -239,7 +239,7 @@ impl NavigatorBackend for ExternalNavigatorBackend {
             _ => Box::pin(async move {
                 let client = client.ok_or_else(|| ErrorResponse {
                     url: processed_url.to_string(),
-                    error: Error::FetchError(FetchError::Other("Network unavailable".to_string())),
+                    error: Error::FetchError("Network unavailable".to_string()),
                 })?;
 
                 let mut isahc_request = match request.method() {
@@ -252,11 +252,11 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                         headers.insert(
                             HeaderName::from_str(name).map_err(|e| ErrorResponse {
                                 url: processed_url.to_string(),
-                                error: Error::FetchError(FetchError::Other(e.to_string())),
+                                error: Error::FetchError(e.to_string()),
                             })?,
                             HeaderValue::from_str(val).map_err(|e| ErrorResponse {
                                 url: processed_url.to_string(),
-                                error: Error::FetchError(FetchError::Other(e.to_string())),
+                                error: Error::FetchError(e.to_string()),
                             })?,
                         );
                     }
@@ -264,24 +264,24 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                         "Content-Type",
                         HeaderValue::from_str(&mime).map_err(|e| ErrorResponse {
                             url: processed_url.to_string(),
-                            error: Error::FetchError(FetchError::Other(e.to_string())),
+                            error: Error::FetchError(e.to_string()),
                         })?,
                     );
                 }
 
                 let body = isahc_request.body(body_data).map_err(|e| ErrorResponse {
                     url: processed_url.to_string(),
-                    error: Error::FetchError(FetchError::Other(e.to_string())),
+                    error: Error::FetchError(e.to_string()),
                 })?;
 
                 let mut response = client.send_async(body).await.map_err(|e| {
                     let inner = match e.kind() {
-                        isahc::error::ErrorKind::NameResolution => FetchError::InvalidDomain,
-                        _ => FetchError::Other(e.to_string()),
+                        isahc::error::ErrorKind::NameResolution => Error::InvalidDomain(processed_url.to_string()),
+                        _ => Error::FetchError(e.to_string()),
                     };
                     ErrorResponse {
                         url: processed_url.to_string(),
-                        error: Error::FetchError(inner),
+                        error: inner,
                     }
                 })?;
 
@@ -294,16 +294,12 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                 let status = response.status().as_u16();
                 let redirected = response.effective_uri().is_some();
                 if !response.status().is_success() {
-                    warn!("HTTP status is not ok, got {}", response.status());
-                    let bytes = response
-                        .bytes()
-                        .await
-                        .map_err(|e| ErrorResponse { url: url.clone(), error: Error::FetchError(FetchError::Other(e.to_string()))})?;
-
-                    let error = Error::FetchError(FetchError::UnsuccessfulStatusCode {
-                        body: bytes,
-                    });
-
+                    let error = Error::HttpNotOk(
+                        format!("HTTP status is not ok, got {}", response.status()),
+                        status,
+                        redirected,
+                        response.body().len().unwrap_or(0),
+                    );
                     return Err(ErrorResponse { url, error });
                 }
 
@@ -313,7 +309,7 @@ impl NavigatorBackend for ExternalNavigatorBackend {
                     .await
                     .map_err(|e| ErrorResponse {
                         url: url.clone(),
-                        error: Error::FetchError(FetchError::Other(e.to_string())),
+                        error: Error::FetchError(e.to_string()),
                     })?;
 
                 Ok(SuccessResponse {

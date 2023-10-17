@@ -1,0 +1,11 @@
+global, super = undefined
+calling foo
+foo, super = undefined
+Create proto
+bar, super = [object Object]
+calling foo in bar
+foo, super = undefined
+new baz
+baz, super = [object Object]
+call test
+test, super = [object Object]
