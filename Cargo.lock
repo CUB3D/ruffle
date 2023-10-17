@@ -4255,6 +4255,7 @@ dependencies = [
  "getrandom",
  "gloo-net",
  "js-sys",
+ "rfd",
  "ruffle_core",
  "ruffle_render",
  "ruffle_render_canvas",

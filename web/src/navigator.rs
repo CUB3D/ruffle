@@ -4,10 +4,7 @@ use async_channel::Receiver;
 use futures_util::{SinkExt, StreamExt};
 use gloo_net::websocket::{futures::WebSocket, Message};
 use js_sys::{Array, ArrayBuffer, Uint8Array};
-use ruffle_core::backend::navigator::{
-    async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse, NavigationMethod,
-    NavigatorBackend, OpenURLMode, OwnedFuture, Request, SuccessResponse,
-};
+use ruffle_core::backend::navigator::{async_return, create_fetch_error, create_specific_fetch_error, ErrorResponse, FetchError, NavigationMethod, NavigatorBackend, OpenURLMode, OwnedFuture, Request, SuccessResponse};
 use ruffle_core::config::NetworkingAccessMode;
 use ruffle_core::indexmap::IndexMap;
 use ruffle_core::loader::Error;
@@ -249,12 +246,12 @@ impl NavigatorBackend for WebNavigatorBackend {
                 )
                 .map_err(|_| ErrorResponse {
                     url: url.to_string(),
-                    error: Error::FetchError("Got JS error".to_string()),
+                    error: Error::FetchError(FetchError::Other("Got JS error".to_string())),
                 })?
                 .dyn_into()
                 .map_err(|_| ErrorResponse {
                     url: url.to_string(),
-                    error: Error::FetchError("Got JS error".to_string()),
+                    error: Error::FetchError(FetchError::Other("Got JS error".to_string())),
                 })?;
 
                 init.body(Some(&blob));
@@ -278,7 +275,7 @@ impl NavigatorBackend for WebNavigatorBackend {
                     .set(header_name, header_val)
                     .map_err(|_| ErrorResponse {
                         url: url.to_string(),
-                        error: Error::FetchError("Got JS error".to_string()),
+                        error: Error::FetchError(FetchError::Other("Got JS error".to_string())),
                     })?;
             }
 
@@ -287,12 +284,12 @@ impl NavigatorBackend for WebNavigatorBackend {
                 .await
                 .map_err(|_| ErrorResponse {
                     url: url.to_string(),
-                    error: Error::FetchError("Got JS error".to_string()),
+                    error: Error::FetchError(FetchError::Other("Got JS error".to_string())),
                 })?;
 
             let response: WebResponse = fetchval.dyn_into().map_err(|_| ErrorResponse {
                 url: url.to_string(),
-                error: Error::FetchError("Fetch result wasn't a WebResponse".to_string()),
+                error: Error::FetchError(FetchError::Other("Fetch result wasn't a WebResponse".to_string())),
             })?;
             let url = response.url();
             let status = response.status();
@@ -309,20 +306,20 @@ impl NavigatorBackend for WebNavigatorBackend {
             let body: ArrayBuffer = JsFuture::from(response.array_buffer().map_err(|_| {
                 ErrorResponse {
                     url: url.clone(),
-                    error: Error::FetchError("Got JS error".to_string()),
+                    error: Error::FetchError(FetchError::Other("Got JS error".to_string())),
                 }
             })?)
             .await
             .map_err(|_| ErrorResponse {
                 url: url.clone(),
                 error: Error::FetchError(
-                    "Could not allocate array buffer for response".to_string(),
+                    FetchError::Other("Could not allocate array buffer for response".to_string()),
                 ),
             })?
             .dyn_into()
             .map_err(|_| ErrorResponse {
                 url: url.clone(),
-                error: Error::FetchError("array_buffer result wasn't an ArrayBuffer".to_string()),
+                error: Error::FetchError(FetchError::Other("array_buffer result wasn't an ArrayBuffer".to_string())),
             })?;
             let body = Uint8Array::new(&body).to_vec();
 
